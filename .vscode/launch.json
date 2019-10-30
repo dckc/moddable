@@ -1,0 +1,25 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(lldb) Launch for SwingSet",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/mac/debug/Screen Test.app/Contents/MacOS/main",
+            "args": ["${workspaceFolder}/build/bin/mac/debug/mc/SwingSet/mc.so"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "logging": {
+                "trace": false,
+                "traceResponse": false,
+                "engineLogging": false
+              }
+        }
+    ]
+}
