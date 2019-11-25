@@ -49,7 +49,12 @@ int main(int argc, char* argv[])  // here
 
 				printf("lin_xs_cli: invoking main(argv)\n");
 				xsCallFunction1(xsVar(1), xsUndefined, xsVar(0));
-				printf(" lin_xs_cli: invoked\n");
+				printf(" lin_xs_cli: invoked; awaiting promise jobs...\n");
+				fxRunPromiseJobs(the);
+				fxRunPromiseJobs(the);  // hmm... how many times? in a loop?
+				fxRunPromiseJobs(the);
+				fxRunPromiseJobs(the);
+				printf(" lin_xs_cli: done.\n");
 			}
 			xsCatch {
 				xsStringValue message = xsToString(xsException);
