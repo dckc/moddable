@@ -1,3 +1,5 @@
+// connect glib event loop with fxQueuePromiseJobsCallback
+#include "lin_xs.h"
 
 #include "xsPlatform.h"
 #include "xs.h"
@@ -50,9 +52,12 @@ int main(int argc, char* argv[])  // here
 				printf("lin_xs_cli: invoking main(argv)\n");
 				xsCallFunction1(xsVar(1), xsUndefined, xsVar(0));
 				printf(" lin_xs_cli: invoked; awaiting promise jobs...\n");
-				for (int qty = 500; qty >= 0; qty--) {
-					// hmm... how many times? in a loop?
-					fxRunPromiseJobs(the);
+				// ISSUE: what about pending timers?
+				int flail = 20;
+				while (g_main_context_pending(NULL) || (flail-- > 0)) {
+					g_main_context_iteration(NULL, TRUE);
+					// ISSUE: are these handled for me?
+					// fxRunPromiseJobs(the);
 				}
 				printf(" lin_xs_cli: done.\n");
 			}
