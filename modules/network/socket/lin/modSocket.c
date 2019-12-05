@@ -56,7 +56,9 @@ struct xsSocketRecord {
     int32_t						skt;
 	uint16_t					port;
 	char						host[256];
-	
+
+	gint                                            watch_in;
+	gint                                            watch_out;
 	uint8_t						useCount;
 	uint8_t						connected;
 	uint8_t						done;
@@ -80,7 +82,7 @@ struct xsListenerRecord {
 
 	int32_t				skt;
 	xsSocket			pending;
-	guint				timer;
+	gint                            watch;
 };
 
 typedef struct {
@@ -88,13 +90,12 @@ typedef struct {
 	int32_t				skt;
 } xsListenerConnectionRecord, *xsListenerConnection;
 
-static xsSocket gSockets = NULL;
-static guint gTimer = 0;
-
 static int doFlushWrite(xsSocket xss);
 static void doDestructor(xsSocket xss);
 
-static gboolean socketServiceTimerCallback(gpointer data);
+static gboolean socketServiceCallback(GIOChannel *source,
+				      GIOCondition condition,
+				      gpointer data);
 static void resolverCallback(GObject *source_object, GAsyncResult *result, gpointer user_data);
 
 static void socketConnected(void *the, void *refcon, uint8_t *message, uint16_t messageLength);
@@ -124,6 +125,20 @@ void socketDownUseCount(xsMachine *the, xsSocket xss)
 	}
 }
 
+static gint addWatch(xsMachine *the, xsSocket xss, GIOCondition condition) {
+	GIOChannel *chan = g_io_channel_unix_new(xss->skt);
+	if (!chan)
+		xsUnknownError("failed to create glib channel");
+	fprintf(stderr, "@@addWatch skt=%d cond=%x\n", xss->skt, condition);
+	return g_io_add_watch_full(chan,
+				   G_PRIORITY_DEFAULT, // TODO: check promises vs. this
+				   condition,
+				   socketServiceCallback,
+				   xss,
+				   /* GDestroyNotify notify*/ NULL);
+}
+
+
 void xs_socket(xsMachine *the)
 {
 	xsSocket xss;
@@ -145,17 +160,8 @@ void xs_socket(xsMachine *the)
 		xsRemember(xss->obj);
 		
 		modInstrumentationAdjust(NetworkSockets, 1);
-		
-		if (!gSockets)
-			gSockets = xss;
-		else {
-			xss->next = gSockets;
-			gSockets = xss;
-		}
 
-		if (0 == gTimer)
-			gTimer = g_timeout_add(20, socketServiceTimerCallback, NULL);
-			
+		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP); // G_IO_NVAL?
 		return;
 	}
 
@@ -214,8 +220,9 @@ void xs_socket(xsMachine *the)
 		uint16_t protocol;
 		xsmcGet(xsVar(0), xsArg(0), xsID_protocol);
 		protocol = xss->protocol = xsmcToInteger(xsVar(0));
-		xss->skt = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, protocol);
+		xss->skt = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, protocol); // AMBIENT
 	}
+	fprintf(stderr, "@@AMBIENT: socket (kind=%d) = %d\n", xss->kind, xss->skt);
 
 	if (-1 == xss->skt)
 		xsUnknownError("create socket failed");
@@ -223,22 +230,12 @@ void xs_socket(xsMachine *the)
 	modInstrumentationAdjust(NetworkSockets, 1);
 	xsRemember(xss->obj);
 
-	if (!gSockets)
-		gSockets = xss;
-	else {
-		xss->next = gSockets;
-		gSockets = xss;
-	}
-
-	if (0 == gTimer)
-		gTimer = g_timeout_add(20, socketServiceTimerCallback, NULL);
-
 	if (kUDP == xss->kind) {
 		if (ttl) {
 			int result, flag = 1;
 			uint8_t loop = 0;
 							
-			result = setsockopt(xss->skt, SOL_SOCKET, SO_BROADCAST, (const void *)&flag, sizeof(flag));
+			result = setsockopt(xss->skt, SOL_SOCKET, SO_BROADCAST, (const void *)&flag, sizeof(flag)); // AMBIENT
 			if (result >= 0)
 				result = setsockopt(xss->skt, SOL_SOCKET, SO_REUSEPORT, (const void *)&flag, sizeof(flag));
 			if (result >= 0)
@@ -269,9 +266,11 @@ void xs_socket(xsMachine *the)
 			if (result < 0)
 				xsUnknownError("UDP multicast setup failed");
 		}
+		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 		return;		
 	}
 	if (kRAW == xss->kind) {
+		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 		return;
 	}
 	
@@ -279,9 +278,10 @@ void xs_socket(xsMachine *the)
 		xsmcGet(xsVar(0), xsArg(0), xsID_host);
 		xsmcToStringBuffer(xsVar(0), xss->host, sizeof(xss->host));
 		
-		GResolver *resolver = g_resolver_get_default();
+		GResolver *resolver = g_resolver_get_default(); // ABMIENT. TODO: require numeric IP
 		if (NULL == resolver)
 			xsUnknownError("no resolver");
+		fprintf(stderr, "@@AMBIENT: resolving %s\n", xss->host);
 		g_resolver_lookup_by_name_async(resolver, xss->host, NULL, resolverCallback, xss);
 	}
 	else
@@ -414,92 +414,54 @@ void listenerConnected(void *the, void *refcon, uint8_t *message, uint16_t messa
 	xsl->pending = NULL;	
 }
 
-gboolean socketServiceTimerCallback(gpointer data)
+gboolean socketServiceCallback(GIOChannel *source,
+			       GIOCondition condition,
+			       gpointer data)
 {
-	#define kMaxSockets 10
-	xsSocket xss;
-	uint8_t i, max, count = 0;
-	int result;
-	xsSocket xsss[kMaxSockets];
-	struct pollfd fds[kMaxSockets];
-	fd_set wfds;
-	uint8_t done = false;
-	
-	// check for new connections
-	for (xss = gSockets; xss; xss = xss->next) {
-		if (!xss->connected && !xss->done) {
-			struct pollfd fds[1];
-			fds[0].fd = xss->skt;
-			fds[0].events = POLLOUT;
-			fds[0].revents = 0;
-			result = poll(fds, 1, 0);
-			if (result > 0) {
-				if (fds[0].revents & (POLLERR | POLLHUP)) {
-					modMessagePostToMachine(xss->the, NULL, 0, socketError, xss);
-				}
-				else if (fds[0].revents & POLLOUT) {
-					xss->connected = true;
-					modMessagePostToMachine(xss->the, NULL, 0, socketConnected, xss);
-				}
-				done = true;
-			}
-		}
-	}
-	if (done)
-		return G_SOURCE_CONTINUE;
-		
-	// collect list of sockets to service
-	for (xss = gSockets; xss; xss = xss->next) {
-		if (xss->connected || (kUDP == xss->kind || kRAW == xss->kind)) {
-			xsss[count] = xss;
-			fds[count].fd = xss->skt;
-			fds[count].events = POLLIN | POLLHUP;
-			fds[count].revents = 0;
-			if (++count == kMaxSockets)
-				break;
-		}
+	xsSocket xss = data;
+
+	fprintf(stderr, "@@socket skt=%d done=%d kind=%d conn=%d in=#%d out=#%d cond %x=%c%c%c%c%c%c\n",
+		xss->skt, xss->done, xss->kind, xss->connected,
+		xss->watch_in, xss->watch_out, 
+		condition,
+		condition & G_IO_NVAL ? 'N' : '-',
+		condition & G_IO_HUP ? 'H' : '-',
+		condition & G_IO_ERR ? 'E' : '-',
+		condition & G_IO_OUT ? 'O' : '-',
+		condition & G_IO_PRI ? 'P' : '-',
+		condition & G_IO_IN ? 'I' : '-'
+		);
+	if (xss->done) {
+		return G_SOURCE_REMOVE;
 	}
 
+	if (condition & G_IO_ERR) {
+		modMessagePostToMachine(xss->the, NULL, 0, socketError, xss);
+	}
+	// check for new connections
+	else if (!xss->connected && (condition & (G_IO_IN | G_IO_OUT)) && !(condition & G_IO_HUP)) {
+		xss->connected = true;
+		modMessagePostToMachine(xss->the, NULL, 0, socketConnected, xss);
+		g_source_remove(xss->watch_in);  // AMBIENT access to main context
+		xss->watch_in = addWatch(xss->the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
+	}
 	// service readable sockets and close disconnected sockets
-	result = poll(fds, count, 0);
-	if (result > 0) {
-		for (i = 0; i < count; ++i) {
-			xss = xsss[i];
-			if ((fds[i].revents & (POLLERR | POLLHUP)) && !xss->done) {
-				modMessagePostToMachine(xss->the, NULL, 0, socketDisconnected, xss);
-			}
-			else if (fds[i].revents & POLLIN) {
-				modMessagePostToMachine(xss->the, NULL, 0, socketReadable, xss);
-			}
-		}
+	else if (xss->connected && (condition & G_IO_HUP)) {
+		modMessagePostToMachine(xss->the, NULL, 0, socketDisconnected, xss);
+	}
+	else if (condition & G_IO_IN) {
+		modMessagePostToMachine(xss->the, NULL, 0, socketReadable, xss);
 	}
 	
 	// check for writable sockets
-	FD_ZERO(&wfds);
-	max = -1;
-	for (xss = gSockets, count = 0; xss; xss = xss->next) {
-		if (xss->connected && !xss->done && xss->unreportedSent) {
-			xsss[count] = xss;
-			FD_SET(xss->skt, &wfds);
-			if (xss->skt > max)
-				max = xss->skt;
-			if (++count == kMaxSockets)
-				break;
-		}
-	}
-	if (0 != count) {
-		struct timeval tv = {0, 0};
-		result = select(max + 1, NULL, &wfds, NULL, &tv);
-		if (result > 0) {
-			for (i = 0; i < count; ++i) {
-				xsSocket xss = xsss[i];
-				if (FD_ISSET(xss->skt, &wfds)) {
-					xss->unreportedSent = 0;
-					xsBeginHost(xss->the);
-						xsCall2(xss->obj, xsID_callback, xsInteger(kSocketMsgDataSent), xsInteger(sizeof(xss->writeBuf)));
-					xsEndHost(xss->the);
-				}
-			}
+	if (xss->connected && condition & G_IO_OUT) {
+		xss->unreportedSent = 0;
+		xsBeginHost(xss->the);
+		xsCall2(xss->obj, xsID_callback, xsInteger(kSocketMsgDataSent), xsInteger(sizeof(xss->writeBuf)));
+		xsEndHost(xss->the);
+		if (xss->watch_out) {
+			g_source_remove(xss->watch_out);  // AMBIENT access to main context
+			xss->watch_out = 0;
 		}
 	}
 
@@ -524,11 +486,13 @@ void resolverCallback(GObject *source_object, GAsyncResult *result, gpointer use
 	if (NULL != ip) {
 		struct sockaddr_in addr;
 		int result;
+		fprintf(stderr, "@@AMBIENT: resolved %s\n", ip);
 		c_memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
 		c_memcpy(&(addr.sin_addr), g_inet_address_to_bytes(address), g_inet_address_get_native_size(address));
 		addr.sin_port = htons(xss->port);
 		result = connect(xss->skt, (struct sockaddr*)&addr, sizeof(addr));
+		xss->watch_in = addWatch(xss->the, xss, G_IO_IN | G_IO_OUT | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 		if (result >= 0) {
 			xss->connected = true;
 			modMessagePostToMachine(xss->the, NULL, 0, socketConnected, xss);
@@ -543,23 +507,12 @@ void resolverCallback(GObject *source_object, GAsyncResult *result, gpointer use
 
 void doDestructor(xsSocket xss)
 {
-	xsSocket walker, prev = NULL;
 	xss->done = 1;
 	
-	for (walker = gSockets; NULL != walker; prev = walker, walker = walker->next) {
-		if (xss == walker) {
-			if (NULL == prev)
-				gSockets = walker->next;
-			else
-				prev->next = walker->next;
-			break;
-		}
-	}	
-	
-	if (NULL == gSockets && 0 != gTimer) {
-		g_source_remove(gTimer);
-		gTimer = 0;
-	}
+	if (0 != xss->watch_in)
+		g_source_remove(xss->watch_in);  // AMBIENT access to main context
+	if (0 != xss->watch_out)
+		g_source_remove(xss->watch_out);  // AMBIENT access to main context
 	
 	if (-1 != xss->skt) {
 		modInstrumentationAdjust(NetworkSockets, -1);
@@ -604,7 +557,7 @@ void xs_socket_get(xsMachine *the)
 		xsResult = xsStringBuffer(NULL, 4 * 5);
 		out = xsmcToString(xsResult);
 
-		getpeername(xss->skt, (struct sockaddr *)&addr, &addrlen);
+		getpeername(xss->skt, (struct sockaddr *)&addr, &addrlen); // AMBIENT
 		inet_ntop(AF_INET, &addr, out, 4 * 5);
 	}
 }
@@ -696,6 +649,7 @@ void xs_socket_read(xsMachine *the)
 	xss->readBytes -= srcBytes;
 }
 
+
 void xs_socket_write(xsMachine *the)
 {
 	xsSocket xss = xsmcGetHostData(xsThis);
@@ -726,7 +680,8 @@ void xs_socket_write(xsMachine *the)
 		int result = sendto(xss->skt, (char*)buf, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
 		if (result < 0)
 			xsUnknownError("sendto failed");
-			
+		xss->watch_out = addWatch(the, xss, G_IO_OUT);
+
 		modInstrumentationAdjust(NetworkBytesWritten, len);
 		
 		return;
@@ -747,6 +702,7 @@ void xs_socket_write(xsMachine *the)
 		int result = sendto(xss->skt, (char*)buf, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
 		if (result < 0)
 			xsUnknownError("sendto failed");
+		xss->watch_out = addWatch(the, xss, G_IO_OUT);
 			
 		modInstrumentationAdjust(NetworkBytesWritten, len);
 		return;
@@ -823,13 +779,16 @@ void xs_socket_write(xsMachine *the)
 
 	if (doFlushWrite(xss))
 		xsUnknownError("write failed");
+	xss->watch_out = addWatch(the, xss, G_IO_OUT);
 }
 
 int doFlushWrite(xsSocket xss)
 {
 	int ret;
 
-	ret = send(xss->skt, (char*)xss->writeBuf, xss->writeBytes, 0);
+	// https://stackoverflow.com/questions/108183/how-to-prevent-sigpipes-or-handle-them-properly
+	fprintf(stderr, "TCP write: %d: %.40s...\n", xss->writeBytes, xss->writeBuf);
+	ret = send(xss->skt, (char*)xss->writeBuf, xss->writeBytes, MSG_NOSIGNAL);  // AMBIENT
 	if (ret < 0)
 		return -1;
 
@@ -847,7 +806,9 @@ int doFlushWrite(xsSocket xss)
 	return 0;
 }
 
-gboolean listenerServiceTimerCallback(gpointer data)
+gboolean listenerInputCallback(GIOChannel *source,
+			       GIOCondition condition,
+			       gpointer data)
 {
 	xsListener xsl = (xsListener)data;
 	int result;
@@ -859,6 +820,7 @@ gboolean listenerServiceTimerCallback(gpointer data)
 		xslc.xsl = xsl;
 		modMessagePostToMachine(xsl->the, (uint8_t*)&xslc, sizeof(xslc), listenerConnected, 0);
 	}	
+	// ISSUE: else report error?
 	return G_SOURCE_CONTINUE;
 }
 
@@ -867,7 +829,7 @@ void xs_listener(xsMachine *the)
 {
 	xsListener xsl;
 	uint16_t port = 0;
-	struct sockaddr_in address = { 0 };
+	struct sockaddr_in address = { 0 };  // ISSUE: 0 = INADDR_ANY; how about localhost only?
 
 	if (xsmcHas(xsArg(0), xsID_port)) {
 		xsmcVars(1);
@@ -877,7 +839,7 @@ void xs_listener(xsMachine *the)
 
 	xsl = (xsListener)c_calloc(sizeof(xsListenerRecord), 1);
 
-	xsl->skt = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_IP);
+	xsl->skt = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_IP);  // AMBIENT - add socket fn to machine?
 	if (-1 == xsl->skt)
 		xsUnknownError("create socket failed");
 
@@ -887,16 +849,25 @@ void xs_listener(xsMachine *the)
 	xsRemember(xsl->obj);
 
 	int yes = 1;
-	setsockopt(xsl->skt, SOL_SOCKET, SO_REUSEADDR, (void *)&yes, sizeof(yes));
+	setsockopt(xsl->skt, SOL_SOCKET, SO_REUSEADDR, (void *)&yes, sizeof(yes));  // AMBIENT
 
 	address.sin_family = AF_INET;
 	address.sin_port = htons(port);
-	if (-1 == bind(xsl->skt, (struct sockaddr *)&address, sizeof(address)))
+	if (-1 == bind(xsl->skt, (struct sockaddr *)&address, sizeof(address)))  // AMBIENT
 		xsUnknownError("bind socket failed");
 
-	xsl->timer = g_timeout_add(50, listenerServiceTimerCallback, xsl);
-
-	if (-1 == listen(xsl->skt, SOMAXCONN))
+	GIOChannel *chan = g_io_channel_unix_new(xsl->skt);
+	if (!chan)
+		xsUnknownError("failed to create glib channel");
+	// AMBIENT: implicit access to main loop. add to the machine?
+	xsl->watch = g_io_add_watch_full(chan,
+					 G_PRIORITY_DEFAULT, // TODO: check promises vs. this
+					 G_IO_IN | G_IO_ERR, // cf. https://stackoverflow.com/questions/21025924/gmainloop-and-tcp-listen-thread-blocking
+					 listenerInputCallback,
+					 xsl,
+					 /* GDestroyNotify notify*/ NULL);
+ 
+	if (-1 == listen(xsl->skt, SOMAXCONN))  // ISSUE: report errno?. AMBIENT
 		xsUnknownError("listen failed");
 }
 
@@ -906,8 +877,8 @@ void xs_listener_destructor(void *data)
 	if (xsl) {
 		if (-1 != xsl->skt)
 			close(xsl->skt);
-		if (0 != xsl->timer)
-			g_source_remove(xsl->timer);
+		if (0 != xsl->watch)
+			g_source_remove(xsl->watch);  // AMBIENT access to main context
 		c_free(xsl);
 	}
 }
@@ -947,6 +918,7 @@ static gboolean modMessageCallback(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
+
 int modMessagePostToMachine(xsMachine *the, uint8_t *message, uint16_t messageLength, modMessageDeliver callback, void *refcon)
 {
 	modMessage msg = c_calloc(1, sizeof(modMessageRecord) + messageLength);
@@ -960,7 +932,8 @@ int modMessagePostToMachine(xsMachine *the, uint8_t *message, uint16_t messageLe
 		c_memmove(msg->message, message, messageLength);
 	msg->length = messageLength;
 	
-	g_timeout_add(1, modMessageCallback, msg);
+	g_idle_add_full(G_PRIORITY_DEFAULT, // TODO: check promises vs. this
+			modMessageCallback, msg, NULL);
 
 	return 0;
 }

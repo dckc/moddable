@@ -51,13 +51,12 @@ int main(int argc, char* argv[])  // here
 
 				printf("lin_xs_cli: invoking main(argv)\n");
 				xsCallFunction1(xsVar(1), xsUndefined, xsVar(0));
-				printf(" lin_xs_cli: invoked; awaiting promise jobs...\n");
+				printf(" lin_xs_cli: invoked; entering event loop...\n");
 				// ISSUE: what about pending timers?
-				int flail = 20;
-				while (g_main_context_pending(NULL) || (flail-- > 0)) {
-					g_main_context_iteration(NULL, TRUE);
-					// ISSUE: are these handled for me?
-					// fxRunPromiseJobs(the);
+				int flail = 200;
+				while ( g_main_context_iteration(NULL, TRUE) || (flail-- > 0)) {
+					fprintf(stderr, "@@flail %d... ", flail);
+					// look for more to do...
 				}
 				printf(" lin_xs_cli: done.\n");
 			}
