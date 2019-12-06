@@ -2,17 +2,17 @@
  * Copyright (c) 2016-2019  Moddable Tech, Inc.
  *
  *   This file is part of the Moddable SDK Runtime.
- * 
+ *
  *   The Moddable SDK Runtime is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as published by
  *   the Free Software Foundation, either version 3 of the License, or
  *   (at your option) any later version.
- * 
+ *
  *   The Moddable SDK Runtime is distributed in the hope that it will be useful,
  *   but WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *   GNU Lesser General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU Lesser General Public License
  *   along with the Moddable SDK Runtime.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -51,7 +51,7 @@ typedef xsSocketRecord *xsSocket;
 
 struct xsSocketRecord {
 	xsSocket					next;
-	
+
 	xsSlot						obj;
 	xsMachine					*the;
 
@@ -66,7 +66,7 @@ struct xsSocketRecord {
 	uint8_t						done;
 	uint8_t						kind;		// kTCP, kUDP, kRAW
 	uint8_t						protocol;	// for raw socket
-	
+
 	uint8_t						*readBuffer;
 	int32_t						readBytes;
 
@@ -163,7 +163,7 @@ void xs_socket(xsMachine *the)
 	uint16_t port = 0;
 	uint32_t multiaddr;
 	struct sockaddr_in address;
-			
+
 	if (DEBUG) fprintf(stderr, "NOTICE: AMBIENT authority in modSocket:\n\
  - g_main_context_default() via g_io_add_watch_full(), g_source_remove()\n\
  - socket(), setsockopt()\n\
@@ -182,7 +182,7 @@ void xs_socket(xsMachine *the)
 		xss->obj = xsThis;
 		xsmcSetHostData(xsThis, xss);
 		xsRemember(xss->obj);
-		
+
 		modInstrumentationAdjust(NetworkSockets, 1);
 
 		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
@@ -192,7 +192,7 @@ void xs_socket(xsMachine *the)
 	xss = (xsSocket)c_calloc(sizeof(xsSocketRecord), 1);
 	if (!xss)
 		xsUnknownError("no memory");
-	
+
 	xsmcSetHostData(xsThis, xss);
 
 	xss->obj = xsThis;
@@ -235,7 +235,7 @@ void xs_socket(xsMachine *the)
 		port = xsmcToInteger(xsVar(0));
 	}
 	xss->port = port;
-	
+
 	if (kTCP == xss->kind)
 		xss->skt = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	else if (kUDP == xss->kind)
@@ -258,7 +258,7 @@ void xs_socket(xsMachine *the)
 		if (ttl) {
 			int result, flag = 1;
 			uint8_t loop = 0;
-							
+
 			result = setsockopt(xss->skt, SOL_SOCKET, SO_BROADCAST, (const void *)&flag, sizeof(flag));
 			if (result >= 0)
 				result = setsockopt(xss->skt, SOL_SOCKET, SO_REUSEPORT, (const void *)&flag, sizeof(flag));
@@ -266,7 +266,7 @@ void xs_socket(xsMachine *the)
 				result = setsockopt(xss->skt, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
 			if (result >= 0)
 				result = setsockopt(xss->skt, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
-				
+
 			// join group
 			if (result >= 0) {
 				struct ip_mreq imr;
@@ -276,7 +276,7 @@ void xs_socket(xsMachine *the)
 					result = setsockopt(xss->skt, IPPROTO_IP, IP_ADD_MEMBERSHIP, &imr, sizeof(imr));
 				}
 			}
-			
+
 			// bind
 			if (result >= 0) {
 				address.sin_family = AF_INET;
@@ -286,22 +286,22 @@ void xs_socket(xsMachine *the)
 				if (0 != result)
 					result = -1;
 			}
-			
+
 			if (result < 0)
 				xsUnknownError("UDP multicast setup failed");
 		}
 		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
-		return;		
+		return;
 	}
 	if (kRAW == xss->kind) {
 		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 		return;
 	}
-	
+
 	if (xsmcHas(xsArg(0), xsID_host)) {
 		xsmcGet(xsVar(0), xsArg(0), xsID_host);
 		xsmcToStringBuffer(xsVar(0), xss->host, sizeof(xss->host));
-		
+
 		GResolver *resolver = g_resolver_get_default();
 		if (NULL == resolver)
 			xsUnknownError("no resolver");
@@ -315,31 +315,31 @@ void xs_socket(xsMachine *the)
 void socketConnected(void *the, void *refcon, uint8_t *message, uint16_t messageLength)
 {
 	xsSocket xss = (xsSocket)refcon;
-		
+
 	socketUpUseCount(the, xss);
-	
+
 	xsBeginHost(the);
 		xsCall1(xss->obj, xsID_callback, xsInteger(kSocketMsgConnect));
 	xsEndHost(the);
-	
+
 	socketDownUseCount(the, xss);
 }
-						
+
 void socketDisconnected(void *the, void *refcon, uint8_t *message, uint16_t messageLength)
 {
 	xsSocket xss = (xsSocket)refcon;
-	
+
 	if (xss->done)
 		return;
-		
+
 	socketUpUseCount(the, xss);
-	
+
 	xsBeginHost(the);
 		xsCall1(xss->obj, xsID_callback, xsInteger(kSocketMsgDisconnect));
 	xsEndHost(the);
-	
+
 	socketDownUseCount(the, xss);
-	
+
 	doDestructor(xss);
 }
 
@@ -353,14 +353,14 @@ void socketReadable(void *the, void *refcon, uint8_t *message, uint16_t messageL
 
 	if (xss->done)
 		return;
-		
+
 	socketUpUseCount(the, xss);
-	
+
 	if (kTCP == xss->kind)
 		count = recv(xss->skt, (char*)buffer, sizeof(buffer), 0);
 	else {
 		count = recvfrom(xss->skt, (char*)buffer, sizeof(buffer), 0, (struct sockaddr*)&saddr, &saddr_len);
-		
+
 		// @@ verify that the protocol matches what we configured
 		// @@ verify that ethernet header protocol matches when protocol is ICMP
 		// @@ an alternative approach would be to check the source ip address matches the host passed to the constructor
@@ -395,14 +395,14 @@ void socketReadable(void *the, void *refcon, uint8_t *message, uint16_t messageL
 			if (kUDP == xss->kind)
 				xsCall4(xss->obj, xsID_callback, xsInteger(kSocketMsgDataReceived), xsInteger(count), xsResult, xsInteger(ntohs(saddr.sin_port)));
 			else
-				xsCall3(xss->obj, xsID_callback, xsInteger(kSocketMsgDataReceived), xsInteger(count), xsResult);		
+				xsCall3(xss->obj, xsID_callback, xsInteger(kSocketMsgDataReceived), xsInteger(count), xsResult);
 		}
 		xsEndHost(the);
 
 		xss->readBuffer = NULL;
 		xss->readBytes = 0;
 	}
-	
+
 bail:
 	socketDownUseCount(the, xss);
 }
@@ -410,9 +410,9 @@ bail:
 void socketError(void *the, void *refcon, uint8_t *message, uint16_t messageLength)
 {
 	xsSocket xss = (xsSocket)refcon;
-	
+
 	socketUpUseCount(the, xss);
-	
+
 	xsBeginHost(the);
 	xsCall1(xss->obj, xsID_callback, xsInteger(kSocketMsgError));		//@@ report the error value
 	xsEndHost(the);
@@ -435,7 +435,7 @@ void listenerConnected(void *the, void *refcon, uint8_t *message, uint16_t messa
 	xsCall1(xsl->obj, xsID_callback, xsInteger(kListenerMsgConnect));
 	xsEndHost(xsl->the);
 
-	xsl->pending = NULL;	
+	xsl->pending = NULL;
 }
 
 gboolean socketServiceCallback(GIOChannel *source,
@@ -471,7 +471,7 @@ gboolean socketServiceCallback(GIOChannel *source,
 	else if (condition & G_IO_IN) {
 		modMessagePostToMachine(xss->the, NULL, 0, socketReadable, xss);
 	}
-	
+
 	// check for writable sockets
 	if (xss->connected && condition & G_IO_OUT) {
 		xss->unreportedSent = 0;
@@ -527,12 +527,12 @@ void resolverCallback(GObject *source_object, GAsyncResult *result, gpointer use
 void doDestructor(xsSocket xss)
 {
 	xss->done = 1;
-	
+
 	if (0 != xss->watch_in)
 		g_source_remove(xss->watch_in);
 	if (0 != xss->watch_out)
-	
 		g_source_remove(xss->watch_out);
+
 	if (-1 != xss->skt) {
 		modInstrumentationAdjust(NetworkSockets, -1);
 		close(xss->skt);
