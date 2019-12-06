@@ -44,6 +44,8 @@
 #define kRxBufferSize 1024
 #define kTxBufferSize 1024
 
+#define DEBUG 1
+
 typedef struct xsSocketRecord xsSocketRecord;
 typedef xsSocketRecord *xsSocket;
 
@@ -125,17 +127,32 @@ void socketDownUseCount(xsMachine *the, xsSocket xss)
 	}
 }
 
+#define CONDITION_FLAGS(c) \
+	(c) & G_IO_NVAL ? 'N' : '-',	    \
+	(c) & G_IO_HUP ? 'H' : '-',	    \
+	(c) & G_IO_ERR ? 'E' : '-', \
+	(c) & G_IO_OUT ? 'O' : '-', \
+	(c) & G_IO_PRI ? 'P' : '-', \
+	(c) & G_IO_IN ? 'I' : '-'
+
+
 static gint addWatch(xsMachine *the, xsSocket xss, GIOCondition condition) {
 	GIOChannel *chan = g_io_channel_unix_new(xss->skt);
 	if (!chan)
 		xsUnknownError("failed to create glib channel");
-	fprintf(stderr, "@@addWatch skt=%d cond=%x\n", xss->skt, condition);
-	return g_io_add_watch_full(chan,
-				   G_PRIORITY_DEFAULT, // TODO: check promises vs. this
+	if (DEBUG) fprintf(stderr, "addWatch skt=%d cond=%x %c%c%c%c%c%c\n",
+			   xss->skt, condition, CONDITION_FLAGS(condition));
+	gint wtag;
+	// "Using ... or g_io_add_watch_full() increments a channel's reference count."
+	wtag = g_io_add_watch_full(chan,
+				   // Promise queue should be higher priority than IO/timer queue
+				   G_PRIORITY_DEFAULT,
 				   condition,
 				   socketServiceCallback,
 				   xss,
 				   /* GDestroyNotify notify*/ NULL);
+	g_io_channel_unref(chan);
+	return wtag;
 }
 
 
@@ -147,6 +164,13 @@ void xs_socket(xsMachine *the)
 	uint32_t multiaddr;
 	struct sockaddr_in address;
 			
+	if (DEBUG) fprintf(stderr, "NOTICE: AMBIENT authority in modSocket:\n\
+ - g_main_context_default() via g_io_add_watch_full(), g_source_remove()\n\
+ - socket(), setsockopt()\n\
+ - send(), sendto(), recv(), recvfrom()\n\
+ - bind(), listen(), accept(), getpeername()\n\
+ - g_resolver_get_default()\n\
+");
 	xsmcVars(1);
 	if (xsmcHas(xsArg(0), xsID_listener)) {
 		xsListener xsl;
@@ -161,7 +185,7 @@ void xs_socket(xsMachine *the)
 		
 		modInstrumentationAdjust(NetworkSockets, 1);
 
-		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP); // G_IO_NVAL?
+		xss->watch_in = addWatch(the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 		return;
 	}
 
@@ -220,9 +244,9 @@ void xs_socket(xsMachine *the)
 		uint16_t protocol;
 		xsmcGet(xsVar(0), xsArg(0), xsID_protocol);
 		protocol = xss->protocol = xsmcToInteger(xsVar(0));
-		xss->skt = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, protocol); // AMBIENT
+		xss->skt = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, protocol);
 	}
-	fprintf(stderr, "@@AMBIENT: socket (kind=%d) = %d\n", xss->kind, xss->skt);
+	if (DEBUG) fprintf(stderr, "AMBIENT: socket (kind=%d) = %d\n", xss->kind, xss->skt);
 
 	if (-1 == xss->skt)
 		xsUnknownError("create socket failed");
@@ -235,7 +259,7 @@ void xs_socket(xsMachine *the)
 			int result, flag = 1;
 			uint8_t loop = 0;
 							
-			result = setsockopt(xss->skt, SOL_SOCKET, SO_BROADCAST, (const void *)&flag, sizeof(flag)); // AMBIENT
+			result = setsockopt(xss->skt, SOL_SOCKET, SO_BROADCAST, (const void *)&flag, sizeof(flag));
 			if (result >= 0)
 				result = setsockopt(xss->skt, SOL_SOCKET, SO_REUSEPORT, (const void *)&flag, sizeof(flag));
 			if (result >= 0)
@@ -278,10 +302,10 @@ void xs_socket(xsMachine *the)
 		xsmcGet(xsVar(0), xsArg(0), xsID_host);
 		xsmcToStringBuffer(xsVar(0), xss->host, sizeof(xss->host));
 		
-		GResolver *resolver = g_resolver_get_default(); // ABMIENT. TODO: require numeric IP
+		GResolver *resolver = g_resolver_get_default();
 		if (NULL == resolver)
 			xsUnknownError("no resolver");
-		fprintf(stderr, "@@AMBIENT: resolving %s\n", xss->host);
+		if (DEBUG) fprintf(stderr, "AMBIENT: resolving %s\n", xss->host);
 		g_resolver_lookup_by_name_async(resolver, xss->host, NULL, resolverCallback, xss);
 	}
 	else
@@ -420,17 +444,12 @@ gboolean socketServiceCallback(GIOChannel *source,
 {
 	xsSocket xss = data;
 
-	fprintf(stderr, "@@socket skt=%d done=%d kind=%d conn=%d in=#%d out=#%d cond %x=%c%c%c%c%c%c\n",
-		xss->skt, xss->done, xss->kind, xss->connected,
-		xss->watch_in, xss->watch_out, 
-		condition,
-		condition & G_IO_NVAL ? 'N' : '-',
-		condition & G_IO_HUP ? 'H' : '-',
-		condition & G_IO_ERR ? 'E' : '-',
-		condition & G_IO_OUT ? 'O' : '-',
-		condition & G_IO_PRI ? 'P' : '-',
-		condition & G_IO_IN ? 'I' : '-'
-		);
+	if (DEBUG)
+		fprintf(stderr,
+			"service skt=%d done=%d kind=%d conn=%d in=#%d out=#%d cond %x=%c%c%c%c%c%c\n",
+			xss->skt, xss->done, xss->kind, xss->connected,
+			xss->watch_in, xss->watch_out,
+			condition, CONDITION_FLAGS(condition));
 	if (xss->done) {
 		return G_SOURCE_REMOVE;
 	}
@@ -442,7 +461,7 @@ gboolean socketServiceCallback(GIOChannel *source,
 	else if (!xss->connected && (condition & (G_IO_IN | G_IO_OUT)) && !(condition & G_IO_HUP)) {
 		xss->connected = true;
 		modMessagePostToMachine(xss->the, NULL, 0, socketConnected, xss);
-		g_source_remove(xss->watch_in);  // AMBIENT access to main context
+		g_source_remove(xss->watch_in);
 		xss->watch_in = addWatch(xss->the, xss, G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP);
 	}
 	// service readable sockets and close disconnected sockets
@@ -460,7 +479,7 @@ gboolean socketServiceCallback(GIOChannel *source,
 		xsCall2(xss->obj, xsID_callback, xsInteger(kSocketMsgDataSent), xsInteger(sizeof(xss->writeBuf)));
 		xsEndHost(xss->the);
 		if (xss->watch_out) {
-			g_source_remove(xss->watch_out);  // AMBIENT access to main context
+			g_source_remove(xss->watch_out);
 			xss->watch_out = 0;
 		}
 	}
@@ -486,7 +505,7 @@ void resolverCallback(GObject *source_object, GAsyncResult *result, gpointer use
 	if (NULL != ip) {
 		struct sockaddr_in addr;
 		int result;
-		fprintf(stderr, "@@AMBIENT: resolved %s\n", ip);
+		if (DEBUG) fprintf(stderr, "... resolved %s\n", ip);
 		c_memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
 		c_memcpy(&(addr.sin_addr), g_inet_address_to_bytes(address), g_inet_address_get_native_size(address));
@@ -510,10 +529,10 @@ void doDestructor(xsSocket xss)
 	xss->done = 1;
 	
 	if (0 != xss->watch_in)
-		g_source_remove(xss->watch_in);  // AMBIENT access to main context
+		g_source_remove(xss->watch_in);
 	if (0 != xss->watch_out)
-		g_source_remove(xss->watch_out);  // AMBIENT access to main context
 	
+		g_source_remove(xss->watch_out);
 	if (-1 != xss->skt) {
 		modInstrumentationAdjust(NetworkSockets, -1);
 		close(xss->skt);
@@ -557,7 +576,7 @@ void xs_socket_get(xsMachine *the)
 		xsResult = xsStringBuffer(NULL, 4 * 5);
 		out = xsmcToString(xsResult);
 
-		getpeername(xss->skt, (struct sockaddr *)&addr, &addrlen); // AMBIENT
+		getpeername(xss->skt, (struct sockaddr *)&addr, &addrlen);
 		inet_ntop(AF_INET, &addr, out, 4 * 5);
 	}
 }
@@ -786,9 +805,9 @@ int doFlushWrite(xsSocket xss)
 {
 	int ret;
 
-	// https://stackoverflow.com/questions/108183/how-to-prevent-sigpipes-or-handle-them-properly
-	fprintf(stderr, "TCP write: %d: %.40s...\n", xss->writeBytes, xss->writeBuf);
-	ret = send(xss->skt, (char*)xss->writeBuf, xss->writeBytes, MSG_NOSIGNAL);  // AMBIENT
+	if (DEBUG) fprintf(stderr, "ABMIENT TCP write: %d: %.40s...\n", xss->writeBytes, xss->writeBuf);
+	// NOSIGNAL per https://stackoverflow.com/questions/108183/how-to-prevent-sigpipes-or-handle-them-properly
+	ret = send(xss->skt, (char*)xss->writeBuf, xss->writeBytes, MSG_NOSIGNAL);
 	if (ret < 0)
 		return -1;
 
@@ -839,7 +858,7 @@ void xs_listener(xsMachine *the)
 
 	xsl = (xsListener)c_calloc(sizeof(xsListenerRecord), 1);
 
-	xsl->skt = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_IP);  // AMBIENT - add socket fn to machine?
+	xsl->skt = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_IP);
 	if (-1 == xsl->skt)
 		xsUnknownError("create socket failed");
 
@@ -849,26 +868,25 @@ void xs_listener(xsMachine *the)
 	xsRemember(xsl->obj);
 
 	int yes = 1;
-	setsockopt(xsl->skt, SOL_SOCKET, SO_REUSEADDR, (void *)&yes, sizeof(yes));  // AMBIENT
+	setsockopt(xsl->skt, SOL_SOCKET, SO_REUSEADDR, (void *)&yes, sizeof(yes));
 
 	address.sin_family = AF_INET;
 	address.sin_port = htons(port);
-	if (-1 == bind(xsl->skt, (struct sockaddr *)&address, sizeof(address)))  // AMBIENT
+	if (-1 == bind(xsl->skt, (struct sockaddr *)&address, sizeof(address)))
 		xsUnknownError("bind socket failed");
 
 	GIOChannel *chan = g_io_channel_unix_new(xsl->skt);
 	if (!chan)
 		xsUnknownError("failed to create glib channel");
-	// AMBIENT: implicit access to main loop. add to the machine?
 	xsl->watch = g_io_add_watch_full(chan,
-					 G_PRIORITY_DEFAULT, // TODO: check promises vs. this
-					 G_IO_IN | G_IO_ERR, // cf. https://stackoverflow.com/questions/21025924/gmainloop-and-tcp-listen-thread-blocking
+					 G_PRIORITY_DEFAULT,
+					 G_IO_IN | G_IO_ERR,
 					 listenerInputCallback,
 					 xsl,
 					 /* GDestroyNotify notify*/ NULL);
  
-	if (-1 == listen(xsl->skt, SOMAXCONN))  // ISSUE: report errno?. AMBIENT
-		xsUnknownError("listen failed");
+	if (-1 == listen(xsl->skt, SOMAXCONN))
+		xsUnknownError("listen failed");  // ISSUE: report errno?
 }
 
 void xs_listener_destructor(void *data)
@@ -878,7 +896,7 @@ void xs_listener_destructor(void *data)
 		if (-1 != xsl->skt)
 			close(xsl->skt);
 		if (0 != xsl->watch)
-			g_source_remove(xsl->watch);  // AMBIENT access to main context
+			g_source_remove(xsl->watch);
 		c_free(xsl);
 	}
 }

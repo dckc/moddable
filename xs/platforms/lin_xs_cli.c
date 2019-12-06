@@ -21,6 +21,8 @@
 		((void)((_ASSERTION) || (fxThrowMessage(the,NULL,0,XS_UNKNOWN_ERROR,"%s",strerror(errno)), 1)))
 #endif
 
+#define DEBUG 1
+
 static char** then = NULL;
 
 void fxAbort(xsMachine* the)
@@ -45,20 +47,19 @@ int main(int argc, char* argv[])  // here
 					xsSetAt(xsVar(0), xsInteger(argi - 1), xsString(argv[argi]));
 				}
 
-				printf("lin_xs_cli: loading top-level main.js\n");
+				if (DEBUG) fprintf(stderr, "lin_xs_cli: loading top-level main.js\n");
 				xsVar(1) = xsAwaitImport("main", XS_IMPORT_DEFAULT);
-				printf(" lin_xs_cli: loaded\n");
+				if (DEBUG) fprintf(stderr, " lin_xs_cli: loaded\n");
 
-				printf("lin_xs_cli: invoking main(argv)\n");
+				if (DEBUG) fprintf(stderr, "lin_xs_cli: invoking main(argv)\n");
 				xsCallFunction1(xsVar(1), xsUndefined, xsVar(0));
-				printf(" lin_xs_cli: invoked; entering event loop...\n");
-				// ISSUE: what about pending timers?
-				int flail = 200;
-				while ( g_main_context_iteration(NULL, TRUE) || (flail-- > 0)) {
-					fprintf(stderr, "@@flail %d... ", flail);
-					// look for more to do...
-				}
-				printf(" lin_xs_cli: done.\n");
+				if (DEBUG) fprintf(stderr, " lin_xs_cli: invoked; entering AMBIENT event loop...\n");
+
+				GMainLoop *loop = g_main_loop_new(g_main_context_default(), FALSE);
+				g_main_loop_run(loop);  // ISSUE: how to exit when quiescent?
+				g_main_loop_unref(loop);
+
+				if (DEBUG) fprintf(stderr, " lin_xs_cli: done.\n");
 			}
 			xsCatch {
 				xsStringValue message = xsToString(xsException);

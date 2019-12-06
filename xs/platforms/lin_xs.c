@@ -48,7 +48,9 @@ static gboolean fxQueueWorkerJobsCallback(void *it);
 
 void fxCreateMachinePlatform(txMachine* the)
 {
-  fprintf(stderr, "@@fxCreateMachinePlatform\n");
+  fprintf(stderr, "NOTICE: AMBIENT authority in lin_xs platform:\n\
+ - g_main_context_get_thread_default()\n\
+");
 	the->workerContext = g_main_context_get_thread_default();
 	g_mutex_init(&(the->workerMutex));
 }
@@ -72,7 +74,6 @@ void fxDeleteMachinePlatform(txMachine* the)
 
 void fxQueuePromiseJobs(txMachine* the)
 {
-  fprintf(stderr, "@@fxQueuePromiseJobs\n");
 	GSource* idle_source = g_idle_source_new();
 	g_source_set_callback(idle_source, fxQueuePromiseJobsCallback, the, NULL);
 	g_source_set_priority(idle_source, G_PRIORITY_HIGH);
@@ -82,7 +83,6 @@ void fxQueuePromiseJobs(txMachine* the)
 
 gboolean fxQueuePromiseJobsCallback(void *it)
 {
-  fprintf(stderr, "@@fxQueuePromiseJobsCallback\n");
 	txMachine* the = it;
 	fxRunPromiseJobs(the);
 	return G_SOURCE_REMOVE;
