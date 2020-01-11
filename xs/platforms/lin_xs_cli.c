@@ -69,7 +69,8 @@ int main(int argc, char* argv[])  // here
 				if (fxPromiseIsRejected(the, &xsVar(2))) {
 					error = 1;
 				}
-				g_main_context_unref(main);
+				// ISSUE: g_main_context_unref(main); causes xsDeleteMachine() below
+				//        to hang in g_main_context_find_source_by_id() aquiring a lock.
 			}
 			xsCatch {
 				xsStringValue message = xsToString(xsException);
