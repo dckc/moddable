@@ -22,6 +22,7 @@
 
 extern void fxRunPromiseJobs(void* machine);
 extern txS1 fxPromiseIsPending(xsMachine* the, xsSlot* promise);
+extern txS1 fxPromiseIsRejected(xsMachine* the, xsSlot* promise);
 
 void fxAbort(xsMachine* the)
 {
@@ -64,6 +65,9 @@ int main(int argc, char* argv[])  // here
 						fxRunPromiseJobs(the);
 					}
 					g_main_context_iteration(main, TRUE);
+				}
+				if (fxPromiseIsRejected(the, &xsVar(2))) {
+					error = 1;
 				}
 				g_main_context_unref(main);
 			}
