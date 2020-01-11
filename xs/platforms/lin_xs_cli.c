@@ -20,8 +20,6 @@
 		((void)((_ASSERTION) || (fxThrowMessage(the,NULL,0,XS_UNKNOWN_ERROR,"%s",strerror(errno)), 1)))
 #endif
 
-static char** then = NULL;
-
 extern void fxRunPromiseJobs(void* machine);
 extern txS1 fxPromiseIsPending(xsMachine* the, xsSlot* promise);
 
@@ -78,14 +76,5 @@ int main(int argc, char* argv[])  // here
 	}
 	xsEndHost(the);
 	xsDeleteMachine(machine);
-	if (!error && then) {
-	#if mxWindows
-		error =_spawnvp(_P_WAIT, then[0], then);
-		if (error < 0)
-			fprintf(stderr, "### Cannot execute %s!\n", then[0]);
-	#else
-		execvp(then[0], then);
-	#endif
-	}
 	return error;
 }
