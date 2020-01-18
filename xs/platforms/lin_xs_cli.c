@@ -58,13 +58,13 @@ int main(int argc, char* argv[])  // here
 				}
 				printf(" lin_xs_cli: main() returned a promise; entering event loop\n");
 
-				GMainContext *main = g_main_context_default();
+				GMainContext *mainctx = g_main_context_default();
 				while (the->promiseJobsFlag || fxPromiseIsPending(the, &xsVar(2))) {
 					while (the->promiseJobsFlag) {
 						the->promiseJobsFlag = 0;
 						fxRunPromiseJobs(the);
 					}
-					g_main_context_iteration(main, TRUE);
+					g_main_context_iteration(mainctx, TRUE);
 				}
 				if (fxPromiseIsRejected(the, &xsVar(2))) {
 					error = 1;
