@@ -1,5 +1,3 @@
-#include "lin_xs.h"
-
 #include "xsPlatform.h"
 #include "xs.h"
 #include "mc.xs.h"
