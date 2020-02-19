@@ -1,0 +1,14 @@
+{
+    "include": [
+        "$(MODDABLE)/examples/manifest_base.json"
+    ],
+    "modules": {
+	"*": [
+	    "./main",
+	    "./vat1",
+            "./snapshot",
+	],
+    },
+    "preload": [
+    ],
+}
