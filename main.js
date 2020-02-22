@@ -10,7 +10,7 @@ function buf2hex(buffer /*: Uint8Array */ ) {
 
 export default function main() {
     const s1 = new Snapshot();
-    const root = 'Hello World';
+    const root = 'Hello World'.repeat(100);
     trace(`${JSON.stringify({ root })}\n`);
     const rawbuf = s1.dump(root, []);
     const data = new Uint8Array(rawbuf);
