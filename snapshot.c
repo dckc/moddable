@@ -73,10 +73,11 @@ void Snapshot_prototype_dump(xsMachine* the)
   // ?? xsIntegerValue c = xsToInteger(xsArgc);
   xsSlot root = xsArg(0);
   // TODO: exits = xsArg(1)
-  xsSlot buf = xsArrayBuffer(NULL, 0); //256@@
-  xsIntegerValue size = dumpSlot(the, (txSlot*)&buf, 0, (txSlot*)&root); // ISSUE: xsSlot -> txSlot???
+  xsVars(1);
+  xsVar(0) = xsArrayBuffer(NULL, 256);
+  xsIntegerValue size = dumpSlot(the, (txSlot*)&(xsVar(0)), 0, (txSlot*)&root); // ISSUE: xsSlot -> txSlot???
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
-  xsSetArrayBufferLength(buf, size);
+  xsSetArrayBufferLength(xsVar(0), size);
   fprintf(stderr, "dump: xsSetArrayBufferLength() done.\n");
-  xsResult = buf;
+  xsResult = xsVar(0);
 }

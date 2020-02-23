@@ -4,15 +4,16 @@ example run:
 
 ```
 -*- mode: compilation; default-directory: "~/projects/moddable/examples/js/snapshots/" -*-
-Compilation started at Sat Feb 22 10:39:04
+Compilation started at Sun Feb 23 15:25:19
 
 make run
 mcconfig -d -o ./build -m -p x-cli-lin
 make[1]: Entering directory '/home/connolly/projects/moddable/examples/js/snapshots'
-# xsc main.xsb
+# xsid snapshot.c.xsi
 # xsl modules
 # xsl modules
 # cc mc.xs.c
+# cc snapshot.c.o
 # cc snapshots
 make[1]: Leaving directory '/home/connolly/projects/moddable/examples/js/snapshots'
 ./build/bin/lin/debug/snapshots
@@ -21,14 +22,22 @@ in main module
  lin_xs_cli: loaded
 lin_xs_cli: invoking main(argv)
 {"root":"Hello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello World"}
-ensureSpace: 0x7ffc08ac63a0, old capacity 0; new size: 4; nextQuantum: 256 (kind: 10 ref: 0x556b76a5bbf0 next: 0x556b76a5bbd0 kind: 17)
-ensureSpace: after set length: 0x7ffc08ac63a0, (kind: 10 ref: 0x556b76a5bbf0 next: 0x556b76a5bbd0 kind: 17)
-ensureSpace: fxSetArrayBufferLength() done. 0x7ffc08ac63a0 length = 256
-append: xsSetArrayBufferData(buf=0x7ffc08ac63a0, offset=0, qty=4)
+ensureSpace: 0x559e408fb520, capacity 256 sufficient for size: 4
+append: xsSetArrayBufferData(buf=0x559e408fb520, offset=0, qty=4)
 append: xsSetArrayBufferData() done.
-ensureSpace: 0x7ffc08ac63a0, capacity 256 sufficient for size: 8
-append: xsSetArrayBufferData(buf=0x7ffc08ac63a0, offset=4, qty=4)
+ensureSpace: 0x559e408fb520, capacity 256 sufficient for size: 8
+append: xsSetArrayBufferData(buf=0x559e408fb520, offset=4, qty=4)
 append: xsSetArrayBufferData() done.
-ensureSpace: 0x7ffc08ac63a0, old capacity 256; new size: 1108; nextQuantum: 1280 (kind: 10 ref: 0x556b76a5bbf0 next: 0x556b76a5bbd0 kind: 17)
-ensureSpace: after set length: 0x7ffc08ac63a0, (kind: 10 ref: 0x556b76a5bbf0 next: 0x556b76a5bbd0 kind: 0)
+ensureSpace: 0x559e408fb520, old capacity 256; new size: 1108; nextQuantum: 1280 (kind: 10 ref: 0x559e408ffbf0 next: 0x559e408ffbd0 kind: 17)
+ensureSpace: after set length: 0x559e408fb520, (kind: 10 ref: 0x559e408ffbf0 next: 0x559e408ffbd0 kind: 17)
+ensureSpace: fxSetArrayBufferLength() done. 0x559e408fb520 length = 1280
+append: xsSetArrayBufferData(buf=0x559e408fb520, offset=8, qty=1100)
+append: xsSetArrayBufferData() done.
+dump: xsSetArrayBufferLength(size=1108)
+dump: xsSetArrayBufferLength() done.
+snapshot: 0x050000004C04000048656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C6448656C6C6F20576F726C64
+{"root":"Hello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello World","snapshot":{"kind":5,"flag":0,"id":0,"len":1100,"txt":"Hello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello WorldHello World"}}
+main() returned immediate value (not a promise). exiting
+
+Compilation finished at Sun Feb 23 15:25:20
 ```
