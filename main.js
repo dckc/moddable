@@ -15,13 +15,15 @@ function traceError(thunk) {
 
 export default function main() {
     const root = [
+        1, 2, 3,
         'Hello World',
-        'Hello World'.repeat(100),
+        'Hello World'.repeat(20),
     ];
-    trace(`${JSON.stringify({ root })}\n`);
+
+    trace(`root type: ${ typeof(root) }\n`); // JSON.stringify could run into circular structures.
 
     const s1 = new Snapshot();
-    const rawbuf = s1.dump(root, []);
+    const rawbuf = s1.dump(root, ["exits sentinel", 12222, Array.protoype, String.prototype]);
     trace(`snapshot: 0x${s1.tohex(rawbuf, 128)}\n`);
     const info = traceError(() => s1.load(rawbuf));
     const { self, next, kind, flag, id, value } = info;

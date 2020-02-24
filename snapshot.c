@@ -50,6 +50,13 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, txSlot* buf, x
     display = xsToString(xsVar(1));
   }
   fprintf(stderr, "==== alreadySeen(%p) %s?\n", target, display);
+
+  if (target->kind == XS_INSTANCE_KIND
+      && target == mxArrayPrototype.value.reference) {
+    fprintf(stderr, "Array.prototype already seen! prototype=%p reference=%p\n",
+            &mxArrayPrototype, mxArrayPrototype.value.reference);
+  }
+
   while (seen >= 0) {
     xsIntegerValue delta;
     txSlot* candidate;
@@ -191,7 +198,11 @@ static xsIntegerValue dumpSlot(xsMachine* the, txSlot* buf, xsIntegerValue offse
 
   switch(slot->kind) {
   case XS_REFERENCE_KIND: {
-    fprintf(stderr, "REFERENCE: Array? %p\n", &mxArrayPrototype);
+    if (slot->value.reference
+        && slot->value.reference->value.instance.prototype == mxArrayPrototype.value.reference) {
+      fprintf(stderr, "found Array! slot=%p reference=%p prototype=%p\n",
+              slot, slot->value.reference, slot->value.reference->value.instance.prototype);
+    }
     offset = dumpSlot(the, buf, offset, slot->value.reference, seen);
   } break;
           /*
@@ -204,7 +215,6 @@ static xsIntegerValue dumpSlot(xsMachine* the, txSlot* buf, xsIntegerValue offse
           */
   case XS_INSTANCE_KIND: {
     // ISSUE: fprintf(file, ".value = { .instance = { NULL, ");
-    fprintf(stderr, "INSTANCE: Array? %p\n", &mxArrayPrototype);
     offset = dumpSlot(the, buf, offset, slot->value.instance.prototype, seen);
   } break;
   case XS_ARRAY_KIND: {
