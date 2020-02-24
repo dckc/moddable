@@ -9,6 +9,12 @@
             "./snapshot",
 	],
     },
+    "creation": {
+        "keys": {
+            "available": 4096
+        },
+        "stack": 8192,
+    },
     "preload": [
     ],
 }
