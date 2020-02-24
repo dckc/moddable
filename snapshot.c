@@ -44,39 +44,39 @@ Each time we serialize a compound slot, we save either
     the address of this slot
 */
 static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, txSlot* buf, xsIntegerValue seen) {
-  fprintf(stderr, "alreadySeen(%p)?\n", target);
   char *display = "[?]";
   if (target->kind == XS_REFERENCE_KIND && xsHas(*target, xsID("toString"))) {
     xsVar(1) = xsCall0(*target, xsID("toString"));
     display = xsToString(xsVar(1));
   }
+  fprintf(stderr, "==== alreadySeen(%p) %s?\n", target, display);
   while (seen >= 0) {
     xsIntegerValue delta;
     txSlot* candidate;
     xsGetArrayBufferData(*buf, seen + sizeof(delta), &candidate, sizeof(candidate));
     if (candidate == target) {
-      fprintf(stderr, "yes seen %p at %d\n", target, seen);
+      fprintf(stderr, "===== yes seen %p at %d\n", target, seen);
       return seen;
     }
     xsGetArrayBufferData(*buf, seen, &delta, sizeof(delta));
     seen += delta;
   }
-  fprintf(stderr, "no not seen %p\n", target);
+  fprintf(stderr, "===== no not seen %p\n", target);
   return -1;
 }
 
 
 static xsIntegerValue pushSelf(xsMachine* the, txSlot* self, txSlot* buf, xsIntegerValue offset, xsIntegerValue *seen) {
   xsIntegerValue delta = (*seen >= 0 ? *seen : 0) - offset;
-  fprintf(stderr, "pushSelf %p; sizeof(delta) = %ld\n", self, sizeof(delta));
+  fprintf(stderr, "=== pushSelf %p; sizeof(delta) = %ld\n", self, sizeof(delta));
   xsIntegerValue found;
   if ((found = alreadySeen(the, self, buf, *seen)) >= 0) {
-    fprintf(stderr, "pushSelf %p; alreadySeen at %d\n", self, found);
+    fprintf(stderr, "==== pushSelf %p; alreadySeen at %d\n", self, found);
     offset = append(the, buf, offset, &found, sizeof(found));
     return -offset;
   }
   *seen = offset;
-  fprintf(stderr, "pushSelf(%p) delta=%d *seen=%d\n", self, delta, *seen);
+  fprintf(stderr, "==== pushSelf(%p) delta=%d *seen=%d\n", self, delta, *seen);
   offset = append(the, buf, offset, &delta, sizeof(delta));
   offset = append(the, buf, offset, &self, sizeof(self));
   return offset;
@@ -88,7 +88,7 @@ static xsIntegerValue dumpID(xsMachine* the, txSlot* buf, xsIntegerValue offset,
   if (id != 0 && id != -1) {
     char* value = fxGetKeyName(the, id);
     if (!value) {
-      fprintf(stderr, "??? id=%d no name?\n", id);
+      fprintf(stderr, "==== ??? id=%d no name?\n", id);
       return offset;
     }
     txU4 len = strlen(value);
@@ -100,7 +100,7 @@ static xsIntegerValue dumpID(xsMachine* the, txSlot* buf, xsIntegerValue offset,
 
 static xsIntegerValue dumpSimpleValue(xsMachine* the, txSlot* buf, xsIntegerValue offset, txSlot* slot)
 {
-  fprintf(stderr, "dumpSimpleValue %p kind = %d\n", slot, slot->kind);
+  fprintf(stderr, "== dumpSimpleValue %p kind = %d\n", slot, slot->kind);
 
   switch(slot->kind) {
   case XS_UNINITIALIZED_KIND:
@@ -110,31 +110,31 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, txSlot* buf, xsIntegerValu
     break;
 
   case XS_BOOLEAN_KIND: {
-    fprintf(stderr, " BOOLEAN = %d\n", slot->value.boolean);
+    fprintf(stderr, "=== BOOLEAN = %d\n", slot->value.boolean);
     offset = append(the, buf, offset, &(slot->value.boolean), sizeof(slot->value.boolean));
   } break;
 
   case XS_INTEGER_KIND: {
-    fprintf(stderr, " INTEGER = %d\n", slot->value.integer);
+    fprintf(stderr, "=== INTEGER = %d\n", slot->value.integer);
     offset = append(the, buf, offset, &(slot->value.integer), sizeof(slot->value.integer));
   } break;
 
   case XS_NUMBER_KIND: {
     // ISSUE: assume IEEE double format?
-    fprintf(stderr, " INTEGER = %f\n", slot->value.number);
+    fprintf(stderr, "=== NUMBER = %f\n", slot->value.number);
     offset = append(the, buf, offset, &(slot->value.number), sizeof(slot->value.number));
   } break;
 
   case XS_STRING_KIND:
   case XS_STRING_X_KIND: {
-    fprintf(stderr, " STRING = %s\n", slot->value.string);
+    fprintf(stderr, "=== STRING = %s\n", slot->value.string);
     txU4 len = strlen(slot->value.string);
     offset = append(the, buf, offset, &len, sizeof(len));
     offset = append(the, buf, offset, slot->value.string, len);
   } break;
 
   case XS_SYMBOL_KIND: {
-    fprintf(stderr, " SYMBOL = %d\n", slot->value.symbol);
+    fprintf(stderr, "=== SYMBOL = %d\n", slot->value.symbol);
     offset = append(the, buf, offset, &(slot->value.symbol), sizeof(slot->value.symbol));
   } break;
     /*@@@@
@@ -151,7 +151,7 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, txSlot* buf, xsIntegerValu
 	} break;
     */
   default:
-    fprintf(stderr, "slot kind not implemented: %d!\n", slot->kind);
+    fprintf(stderr, "== slot kind not implemented: %d!\n", slot->kind);
     assert(0); //
   }
 
@@ -167,12 +167,12 @@ static xsIntegerValue dumpSlot(xsMachine* the, txSlot* buf, xsIntegerValue offse
 {
   if (!slot) {
     txKind null_slot_kind = XS_UNINITIALIZED_KIND - 1;
-    fprintf(stderr, "dumpSlot %p\n", slot);
+    fprintf(stderr, "= dumpSlot %p\n", slot);
     offset = append(the, buf, offset, &null_slot_kind, sizeof(txKind));
     return offset;
   }
 
-  fprintf(stderr, "dumpSlot %p kind = %d\n", slot, slot->kind);
+  fprintf(stderr, "== dumpSlot %p kind = %d\n", slot, slot->kind);
   offset = append(the, buf, offset, &(slot->kind), sizeof(slot->kind));
 
   if (slot->kind < XS_REFERENCE_KIND) {
@@ -394,7 +394,7 @@ static xsIntegerValue dumpSlot(xsMachine* the, txSlot* buf, xsIntegerValue offse
      */
 
   default:
-    fprintf(stderr, "slot kind not implemented: %d!\n", slot->kind);
+    fprintf(stderr, "== slot kind not implemented: %d!\n", slot->kind);
     assert(0); //
   }
 
