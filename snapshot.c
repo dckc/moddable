@@ -45,6 +45,11 @@ Each time we serialize a compound slot, we save either
 */
 static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, txSlot* buf, xsIntegerValue seen) {
   fprintf(stderr, "alreadySeen(%p)?\n", target);
+  char *display = "[?]";
+  if (target->kind == XS_REFERENCE_KIND && xsHas(*target, xsID("toString"))) {
+    xsVar(1) = xsCall0(*target, xsID("toString"));
+    display = xsToString(xsVar(1));
+  }
   while (seen >= 0) {
     xsIntegerValue delta;
     txSlot* candidate;
@@ -406,6 +411,8 @@ void Snapshot_prototype_dump(xsMachine* the)
   xsVars(2);
   xsVar(0) = xsArrayBuffer(NULL, 256);  // snapshot serialization
   xsIntegerValue seen = -1;
+  // xsVar(1) is for seen.toString() temp space
+
   xsIntegerValue size = dumpSlot(the, (txSlot*)&(xsVar(0)), 0, (txSlot*)&root, // ISSUE: xsSlot -> txSlot???
                                  &seen);
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
