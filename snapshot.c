@@ -17,6 +17,25 @@ void Snapshot_prototype_destructor(xsMachine* the)
 #pragma GCC diagnostic warning "-Wunused-parameter"
 
 
+static char debug_buf[1024] = { 0 };
+
+static void debug_push(char *format, ...) {
+  char *start = debug_buf + strlen(debug_buf);
+  va_list spread;
+  va_start(spread, format);
+  vsprintf(start, format, spread);
+  fprintf(stderr, ">%s\n", debug_buf);
+}
+
+static void debug_pop() {
+  char* last_dot = strrchr(debug_buf, '>');
+  fprintf(stderr, "<%s\n", debug_buf);
+  if (last_dot) {
+    *last_dot = 0;
+  }
+}
+
+
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
  * ENSURES: buf.length is at least size
@@ -73,6 +92,10 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
   if ((ix = xsToInteger(xsCall1(xsArg(1), xsID("indexOf"), *target))) >= 0) {
       fprintf(stderr, "===== yes %p is exit %d\n", target, seen);
       return ix;
+  }
+
+  if (fxIsSameValue(the, target, &mxArrayPrototype, 0)) {
+    fprintf(stderr, "!! target:%p == Array.prototype\n", target);
   }
 
   if (target->kind == XS_INSTANCE_KIND
@@ -158,31 +181,35 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, xsIntegerValue offset, txS
     break;
 
   case XS_BOOLEAN_KIND: {
-    fprintf(stderr, "=== BOOLEAN = %d\n", slot->value.boolean);
+    debug_push(">=%s", slot->value.boolean ? "true" : "false");
     offset = append(the, offset, &(slot->value.boolean), sizeof(slot->value.boolean));
+    debug_pop();
   } break;
 
   case XS_INTEGER_KIND: {
-    fprintf(stderr, "=== INTEGER = %d\n", slot->value.integer);
+    debug_push(">=%d", slot->value.integer);
     offset = append(the, offset, &(slot->value.integer), sizeof(slot->value.integer));
+    debug_pop();
   } break;
 
   case XS_NUMBER_KIND: {
     // ISSUE: assume IEEE double format?
-    fprintf(stderr, "=== NUMBER = %f\n", slot->value.number);
+    debug_push(">=%f", slot->value.number);
     offset = append(the, offset, &(slot->value.number), sizeof(slot->value.number));
+    debug_pop();
   } break;
 
   case XS_STRING_KIND:
   case XS_STRING_X_KIND: {
-    fprintf(stderr, "=== STRING = %s\n", slot->value.string);
     txU4 len = strlen(slot->value.string);
+    debug_push(">= #%d '%.4s'", len, slot->value.string);
     offset = append(the, offset, &len, sizeof(len));
     offset = append(the, offset, slot->value.string, len);
+    debug_pop();
   } break;
 
   case XS_SYMBOL_KIND: {
-    fprintf(stderr, "=== SYMBOL = %d\n", slot->value.symbol);
+    debug_push("> sym:%d", slot->value.symbol);
     offset = append(the, offset, &(slot->value.symbol), sizeof(slot->value.symbol));
   } break;
     /*@@@@
@@ -223,18 +250,22 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     return offset;
   }
 
-  fprintf(stderr, "== dumpSlot %p kind:%d offset:%d\n", slot, slot->kind, offset);
+  debug_push(">slot: %p kind:%d offset:%d", slot, slot->kind, offset);
   offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
 
   if (slot->kind < XS_REFERENCE_KIND) {
     offset = append(the, offset, &(slot->flag), sizeof(slot->flag));
     offset = dumpID(the, offset, slot->ID);
     offset = dumpSimpleValue(the, offset, slot);
+    debug_push(">next");
     offset = dumpSlot(the, offset, slot->next, seen);
+    debug_pop();
+    debug_pop();
     return offset;
   }
 
   if ((offset = pushSelf(the, slot, offset, seen)) < 0) {
+    debug_pop();
     return -offset;
   }
   offset = append(the, offset, &(slot->flag), sizeof(slot->flag));
@@ -243,11 +274,18 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
   switch(slot->kind) {
   case XS_REFERENCE_KIND: {
     if (slot->value.reference
+        && slot->value.reference == mxArrayPrototype.value.reference) {
+      fprintf(stderr, "found Array.prototype! slot=%p reference=%p\n",
+              slot, slot->value.reference);
+    }
+    if (slot->value.reference
         && slot->value.reference->value.instance.prototype == mxArrayPrototype.value.reference) {
       fprintf(stderr, "found Array! slot=%p reference=%p prototype=%p\n",
               slot, slot->value.reference, slot->value.reference->value.instance.prototype);
     }
+    debug_push(">reference");
     offset = dumpSlot(the, offset, slot->value.reference, seen);
+    debug_pop();
   } break;
           /*
 	case XS_CLOSURE_KIND: {
@@ -259,7 +297,9 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
           */
   case XS_INSTANCE_KIND: {
     // ISSUE: fprintf(file, ".value = { .instance = { NULL, ");
+    debug_push(">prototype");
     offset = dumpSlot(the, offset, slot->value.instance.prototype, seen);
+    debug_pop();
   } break;
   case XS_ARRAY_KIND: {
     // ISSUE: fprintf(file, ".value = { .array = { NULL, 0 } }");
@@ -381,8 +421,12 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
 	} break;
           */
   case XS_ACCESSOR_KIND: {
+    debug_push(">getter");
     offset = dumpSlot(the, offset, slot->value.accessor.getter, seen);
+    debug_pop();
+    debug_push(">setter");
     offset = dumpSlot(the, offset, slot->value.accessor.setter, seen);
+    debug_pop();
   } break;
           /*
 	case XS_AT_KIND: {
@@ -401,8 +445,12 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
 	} break;
           */
   case XS_HOME_KIND: {
+    debug_push(">home-object");
     offset = dumpSlot(the, offset, slot->value.home.object, seen);
+    debug_pop();
+    debug_push(">home-module");
     offset = dumpSlot(the, offset, slot->value.home.module, seen);
+    debug_pop();
   } break;
           /*
 	case XS_EXPORT_KIND: {
@@ -452,7 +500,10 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     assert(0); //
   }
 
+  debug_push(">next");
   offset = dumpSlot(the, offset, slot->next, seen);
+  debug_pop();
+  debug_pop();
   return offset;
 }
 
@@ -474,13 +525,15 @@ void Snapshot_prototype_dump(xsMachine* the)
   xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
   xsIntegerValue seen = exitQty - 1;  // IDEA: use xsVars() for seen too
   xsVars(3);
-  xsVar(0) = xsArrayBuffer(NULL, exitQty);  // snapshot serialization
+  // xsVar(0) is snapshot serialization
+  xsVar(0) = xsArrayBuffer(NULL, exitQty);
   // xsVar(1) is for seen.toString() temp space
 
+  debug_push(">root");
   xsIntegerValue size = dumpSlot(the, exitQty, (txSlot*)&root, // ISSUE: xsSlot -> txSlot???
                                  &seen);
+  debug_pop();
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
   xsSetArrayBufferLength(xsVar(0), size);
-  fprintf(stderr, "dump: xsSetArrayBufferLength() done.\n");
   xsResult = xsVar(0);
 }
