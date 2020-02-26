@@ -6,6 +6,9 @@
 #include "xsAll.h"
 #include "xs.h"
 
+#define KEEP_NEXT 0
+#define SKIP_NEXT 1
+
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void Snapshot_prototype_constructor(xsMachine* the)
 {
@@ -68,9 +71,10 @@ static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, x
 
 /** track "seen" slots
  * REQUIRES: xsVar(0) is an ArrayBuffer
- *           xsArg(1) is an Array
- *           xsVar(1) is available for storing toString() output
+ *           xsArg(1) is an Array (exits)
  *           seen >= xsArg(1).length
+ *           xsVar(1) is available for storing toString() output
+ *           xsVar(2) thru 5 are available (for iterating over exits)
 
 avoid infinite recursion for cyclic structures
 
@@ -87,11 +91,23 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
   }
   fprintf(stderr, "==== alreadySeen(%p) seen=%d %s?\n", target, seen, display);
 
-  // xsArg(1) == exits
-  xsIntegerValue ix;
-  if ((ix = xsToInteger(xsCall1(xsArg(1), xsID("indexOf"), *target))) >= 0) {
-      fprintf(stderr, "===== yes %p is exit %d\n", target, seen);
+  xsIntegerValue ix = 0;
+  xsVar(2) = xsEnumerate(xsArg(1));
+  for (;;) {
+    xsVar(3) = xsCall0(xsVar(2), xsID("next"));
+    // ISSUE: warning: operation on ‘the->stack’ may be undefined [-Wsequence-point]
+    if (xsTest(xsGet(xsVar(3), xsID("done"))))
+      break;
+    xsVar(4) = xsGet(xsVar(3), xsID("value"));
+    xsVar(5) = xsGetAt(xsArg(1), xsVar(4));
+    // fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
+    //         ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
+    if (fxIsSameSlot(the, &xsVar(5), target)
+        || fxGetInstance(the, &xsVar(5)) == target) {
+      fprintf(stderr, "===== yes %p is exit %d\n", target, ix);
       return ix;
+    }
+    ix += 1;
   }
 
   if (fxIsSameValue(the, target, &mxArrayPrototype, 0)) {
@@ -241,7 +257,8 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, xsIntegerValue offset, txS
 // https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L946
 // ISSUE: addresses are non-deterministic; exposes runtime details. Snapshot object is hence powerful.
 // IDEA: consider protobuf? capnproto?
-static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
+static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot,
+                               xsIntegerValue* seen, txBoolean skip_next)
 {
   if (!slot) {
     txKind null_slot_kind = XS_UNINITIALIZED_KIND - 1;
@@ -257,9 +274,11 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     offset = append(the, offset, &(slot->flag), sizeof(slot->flag));
     offset = dumpID(the, offset, slot->ID);
     offset = dumpSimpleValue(the, offset, slot);
-    debug_push(">next");
-    offset = dumpSlot(the, offset, slot->next, seen);
-    debug_pop();
+    if (!skip_next) {
+      debug_push(">next");
+      offset = dumpSlot(the, offset, slot->next, seen, KEEP_NEXT);
+      debug_pop();
+    }
     debug_pop();
     return offset;
   }
@@ -284,7 +303,7 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
               slot, slot->value.reference, slot->value.reference->value.instance.prototype);
     }
     debug_push(">reference");
-    offset = dumpSlot(the, offset, slot->value.reference, seen);
+    offset = dumpSlot(the, offset, slot->value.reference, seen, KEEP_NEXT);
     debug_pop();
   } break;
           /*
@@ -298,11 +317,22 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
   case XS_INSTANCE_KIND: {
     // ISSUE: fprintf(file, ".value = { .instance = { NULL, ");
     debug_push(">prototype");
-    offset = dumpSlot(the, offset, slot->value.instance.prototype, seen);
+    offset = dumpSlot(the, offset, slot->value.instance.prototype, seen, KEEP_NEXT);
     debug_pop();
   } break;
   case XS_ARRAY_KIND: {
-    // ISSUE: fprintf(file, ".value = { .array = { NULL, 0 } }");
+    txSlot *item = slot->value.array.address;
+    txInteger size = (txInteger)fxGetIndexSize(the, slot);
+    offset = append(the, offset, &size, sizeof(size));
+    while (size) {
+      // ISSUE: XS_MARK_FLAG??
+      debug_push(">item[%d]", size);
+      offset = dumpSlot(the, offset, item, seen, SKIP_NEXT);
+      debug_pop();
+      item++;
+      size--;
+    }
+    skip_next = 1;
   } break;
           /*
 	case XS_ARRAY_BUFFER_KIND: {
@@ -322,11 +352,11 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
             txChunk* chunk = (txChunk*)(slot->value.code.address - sizeof(txChunk));
             offset = append(the, offset, slot->value.code.address, chunk->size - sizeof(txChunk));
           }
-          offset = dumpSlot(the, offset, slot->value.code.closures, seen);
+          offset = dumpSlot(the, offset, slot->value.code.closures, seen, KEEP_NEXT);
 	} break;
 	case XS_CODE_X_KIND: {
           offset = append(the, offset, &slot->value.code.address, sizeof(slot->value.code.address));
-          offset = dumpSlot(the, offset, slot->value.code.closures, seen);
+          offset = dumpSlot(the, offset, slot->value.code.closures, seen, KEEP_NEXT);
 	} break;
           /*
 	case XS_DATE_KIND: {
@@ -422,10 +452,10 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
           */
   case XS_ACCESSOR_KIND: {
     debug_push(">getter");
-    offset = dumpSlot(the, offset, slot->value.accessor.getter, seen);
+    offset = dumpSlot(the, offset, slot->value.accessor.getter, seen, KEEP_NEXT);
     debug_pop();
     debug_push(">setter");
-    offset = dumpSlot(the, offset, slot->value.accessor.setter, seen);
+    offset = dumpSlot(the, offset, slot->value.accessor.setter, seen, KEEP_NEXT);
     debug_pop();
   } break;
           /*
@@ -446,10 +476,10 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
           */
   case XS_HOME_KIND: {
     debug_push(">home-object");
-    offset = dumpSlot(the, offset, slot->value.home.object, seen);
+    offset = dumpSlot(the, offset, slot->value.home.object, seen, KEEP_NEXT);
     debug_pop();
     debug_push(">home-module");
-    offset = dumpSlot(the, offset, slot->value.home.module, seen);
+    offset = dumpSlot(the, offset, slot->value.home.module, seen, KEEP_NEXT);
     debug_pop();
   } break;
           /*
@@ -500,9 +530,11 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     assert(0); //
   }
 
-  debug_push(">next");
-  offset = dumpSlot(the, offset, slot->next, seen);
-  debug_pop();
+  if (!skip_next) {
+    debug_push(">next");
+    offset = dumpSlot(the, offset, slot->next, seen, KEEP_NEXT);
+    debug_pop();
+  }
   debug_pop();
   return offset;
 }
@@ -524,14 +556,15 @@ void Snapshot_prototype_dump(xsMachine* the)
 
   xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
   xsIntegerValue seen = exitQty - 1;  // IDEA: use xsVars() for seen too
-  xsVars(3);
+  xsVars(6);
   // xsVar(0) is snapshot serialization
   xsVar(0) = xsArrayBuffer(NULL, exitQty);
   // xsVar(1) is for seen.toString() temp space
+  // xsVar(2) thru 5 are for enumerating exits
 
   debug_push(">root");
   xsIntegerValue size = dumpSlot(the, exitQty, (txSlot*)&root, // ISSUE: xsSlot -> txSlot???
-                                 &seen);
+                                 &seen, KEEP_NEXT);
   debug_pop();
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
   xsSetArrayBufferLength(xsVar(0), size);

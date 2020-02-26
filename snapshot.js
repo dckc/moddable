@@ -82,9 +82,9 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             return { flag, id, idname };
         }
 
-        function slot() {
+        function slot(skip_next = false) {
             const kind = i8('kind');
-            trace(`slot kind: ${kind}\n`);
+            trace(`slot kind: ${kind} skip_next:${skip_next}\n`);
             if (kind == -2) {
                 return null; // NULL
             }
@@ -108,7 +108,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 default:
                     throw new RangeError(kind);
                 }
-                const next = slot();
+                const next = skip_next ? null : slot();
                 return { kind, flag, id, idname, value, next };
             }
 
@@ -117,7 +117,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             if (delta > 0) {
                 self = u64(alldata.slice(delta, delta + 8));
                 trace(`seen slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
-                return { self };
+                return delta <= exitQty ? { exit: delta } : { self, delta };
             } else {
                 self = u64go('self');
                 trace(`fresh slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
@@ -133,7 +133,14 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 value = { garbage: null, prototype };
                 break;
             case 16: // XS_ARRAY_KIND
-                value = [ null, 0 ]; //??
+                let size = u32('array size');
+                value = [];
+                while (size > 0) {
+                    trace(`array items to do: ${size}\n`);
+                    value.push(slot(true));
+                    size -= 1;
+                }
+                skip_next = true;
                 break;
             case 20: // XS_CODE_X_KIND
                 const address = u64go('code.address');
@@ -157,7 +164,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             default:
                 throw new RangeError(kind);
             }
-            const next = slot();
+            const next = skip_next ? null : slot();
             trace(`compound: ${JSON.stringify({ kind, self, flag, id, idname, value, next }, null, 2)}\n`);
             return { kind, self, flag, id, idname, value, next };
         }

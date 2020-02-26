@@ -21,7 +21,7 @@ export default function main() {
     ];
 
     trace(`root type: ${ typeof root }\n`); // JSON.stringify could run into circular structures.
-    const exits = [Array.prototype, String.prototype, true, 1];
+    const exits = [Object.prototype, Array.prototype, String.prototype, true, 1];
     trace(`root type: ${JSON.stringify(exits.map(e => typeof e))}\n`);
     trace(`[] prototype in exits? ${exits.indexOf(root.__proto__)}\n`);
     const s1 = new Snapshot();
@@ -29,5 +29,5 @@ export default function main() {
     trace(`snapshot: 0x${s1.tohex(rawbuf, 128)}\n`);
     const info = traceError(() => s1.load(rawbuf, exits.length));
     const { self, next, kind, flag, id, value } = info;
-    trace(`snapshot value: ${JSON.stringify({ self, next, kind, flag, id, value })}\n`);
+    trace(`snapshot value: ${JSON.stringify({ self, next, kind, flag, id, value }, null, 2)}\n`);
 }
