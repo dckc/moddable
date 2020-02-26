@@ -27,6 +27,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             trace(`go(${qty}, ${label}) ${tohex(used)} => ${tohex(data, 16)}\n`);
         }
 
+        // IDEA/TODO: use DataView.getUint8 etc.
         const u8 = (label) => {
             const x = data[0];
             go(1, label);
@@ -92,8 +93,11 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 case 0: // XS_UNDEFINED_KIND
                     value = undefined;
                     break;
+                case 1: // XS_NULL_KIND
+                    value = null;
+                    break;
                 case 2: // XS_BOOLEAN_KIND
-                    value = !!u8('bool');
+                    value = !!u32('bool');
                     break;
                 case 3: // XS_INTEGER_KIND
                     value = i32('int');
@@ -103,6 +107,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                     value = chars('string');
                     break;
                 default:
+                    // TODO: Symbol, BigInt, ...
                     throw new RangeError(kind);
                 }
                 const next = skip_next ? null : slot();
@@ -159,6 +164,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 value = { address: cb_addr };
                 break;
             default:
+                // TODO: lots
                 throw new RangeError(kind);
             }
             const next = skip_next ? null : slot();

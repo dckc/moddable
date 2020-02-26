@@ -16,6 +16,8 @@ function traceError(thunk) {
 export default function main() {
     const root = [
         1, 2, 3,
+        true, false,
+        null, undefined,
         'Hello World',
         'Hello World'.repeat(20),
     ];
