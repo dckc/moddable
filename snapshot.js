@@ -74,10 +74,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
         function flagid() {
             const flag = u8('flag');
             const id = i16('id');
-            let idname = null;
-            if (id != 0 && id != -1 && id != 3) { // ISSUE: 3???
-                idname = chars('id name');
-            }
+            const idname = chars('id name') || null;
             trace(`flagid ${flag} ${id} ${idname}\n`);
             return { flag, id, idname };
         }

@@ -164,21 +164,22 @@ static xsIntegerValue pushSelf(xsMachine* the, txSlot* self, xsIntegerValue offs
 
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
+ *
+ * NOTE: conflates null ID name with empty ID name
  */
 static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txID id)
 {
   offset = append(the, offset, &id, sizeof(id));
-  if (id != 0 && id != -1) {
-    char* value = fxGetKeyName(the, id);
-    if (!value) {
-      fprintf(stderr, "==== ??? id=%d ??no name?\n", id);
-      return offset;
-    }
-    fprintf(stderr, "==== dumpID=%d %s\n", id, value);
-    txU4 len = strlen(value);
-    offset = append(the, offset, &len, sizeof(len));
+  txU4 len = 0;
+  char* value = fxGetKeyName(the, id);
+  if (value) {
+    len = strlen(value);
+  }
+  offset = append(the, offset, &len, sizeof(len));
+  if (value) {
     offset = append(the, offset, value, len);
   }
+  fprintf(stderr, "==== dumpID=%d %s\n", id, value);
   return offset;
 }
 
