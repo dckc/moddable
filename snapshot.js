@@ -17,75 +17,73 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
         return tohex(new Uint8Array(rawbuf), limit);
     }
 
-    load(rawbuf) {
+    load(rawbuf, exitQty) {
         const alldata = new Uint8Array(rawbuf);
-        let data = alldata;
+        let data = alldata.slice(exitQty);
 
-        function go(qty) {
+        function go(qty, label) {
             const used = data.slice(0, qty);
             data = data.slice(qty);
-            trace(`go(${qty}) ${tohex(used)} => ${tohex(data, 16)}\n`);
+            trace(`go(${qty}, ${label}) ${tohex(used)} => ${tohex(data, 16)}\n`);
         }
 
-        const u8 = () => {
+        const u8 = (label) => {
             const x = data[0];
-            go(1);
+            go(1, label);
             return x;
         };
-        const i8 = () => {
-            const u = u8();
+        const i8 = (label) => {
+            const u = u8(label);
             return u >= 0x80 ? (-1 - ((~u) & 0x7f)) : u;
         };
-        const u16 = () => {
+        const u16 = (label) => {
             const x = data[0] + data[1] * 0x100;
-            go(2);
+            go(2, label);
             return x;
         };
-        const i16 = () => {
-            const u = u16();
+        const i16 = (label) => {
+            const u = u16(label);
             return u >= 0x8000 ? (-1 - ((~u) & 0x7fff)) : u;
         };
-        const u32 = () => {
+        const u32 = (label) => {
             const x = data[0] + 0x100 * (data[1] + 0x100 * (data[2] + 0x100 * data[3]));
-            go(4);
+            go(4, label);
             return x;
         };
-        const i32 = () => {
-            const u = u32();
+        const i32 = (label) => {
+            const u = u32(label);
             // trace(`i32: ${u >= 0x80000000} ? ${(~u - 1)} : ${u}\n`);
             return u >= 0x80000000 ? (-1 - ((~u) & 0x7fffffff)) : u;
         };
-        const chars = () => {
-            const len = u32();
+        const chars = (label) => {
+            const len = u32('len');
             const s = [...data.slice(0, len)].map(b => String.fromCharCode(b)).join('');
-            go(len);
+            go(len, label);
             return s;
         };
         const u64 = data => data[0] + 0x100 * (data[1] + 0x100 *
-                                               (data[2] + 0x100 *
-                                                (data[3] + 0x100 *
-                                                 (data[4] + 0x100 *
-                                                  (data[5] + 0x100 *
+                                               (data[2] + 0x100 * (data[3] + 0x100 *
+                                                 (data[4] + 0x100 * (data[5] + 0x100 *
                                                    (data[6] + 0x100 * data[7]))))));
-        const u64go = () => {
+        const u64go = (label) => {
             const x = u64(data);
-            go(8);
+            go(8, label);
             return x;
         };
 
         function flagid() {
-            const flag = u8();
-            const id = i16();
+            const flag = u8('flag');
+            const id = i16('id');
             let idname = null;
             if (id != 0 && id != -1 && id != 3) { // ISSUE: 3???
-                idname = chars();
+                idname = chars('id name');
             }
             trace(`flagid ${flag} ${id} ${idname}\n`);
             return { flag, id, idname };
         }
 
         function slot() {
-            const kind = i8();
+            const kind = i8('kind');
             trace(`slot kind: ${kind}\n`);
             if (kind == -2) {
                 return null; // NULL
@@ -98,14 +96,14 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                     value = undefined;
                     break;
                 case 2: // XS_BOOLEAN_KIND
-                    value = !!u8();
+                    value = !!u8('bool');
                     break;
                 case 3: // XS_INTEGER_KIND
-                    value = i32();
+                    value = i32('int');
                     break;
                 case 5: // XS_STRING_KIND
                 case 6: // XS_STRING_X_KIND
-                    value = chars();
+                    value = chars('string');
                     break;
                 default:
                     throw new RangeError(kind);
@@ -114,15 +112,15 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 return { kind, flag, id, idname, value, next };
             }
 
-            const delta = i32(); // txIntegerValue is 32bits
+            const delta = i32('delta'); // txIntegerValue is 32bits
             let self;
             if (delta > 0) {
-                self = u64(alldata.slice(delta, 8));
-                trace(`seen slot: ${delta}, ${self.toString(16)}\n`);
+                self = u64(alldata.slice(delta, delta + 8));
+                trace(`seen slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
                 return { self };
             } else {
-                self = u64go();
-                trace(`fresh slot: ${delta}, ${self.toString(16)}\n`);
+                self = u64go('self');
+                trace(`fresh slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
             }
             const { flag, id, idname } = flagid();
             switch (kind) {
@@ -138,7 +136,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 value = [ null, 0 ]; //??
                 break;
             case 20: // XS_CODE_X_KIND
-                const address = u64go();
+                const address = u64go('code.address');
                 const closures = slot();
                 value = { address, closures };
                 break;
@@ -153,7 +151,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 value = { object, module };
                 break;
             case 48: // XS_CALLBACK_X_KIND
-                const cb_addr = u64go();
+                const cb_addr = u64go('callback.address');
                 value = { address: cb_addr };
                 break;
             default:
