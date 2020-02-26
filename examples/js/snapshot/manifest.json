@@ -1,0 +1,20 @@
+{
+    "include": [
+        "$(MODDABLE)/examples/manifest_base.json"
+    ],
+    "modules": {
+	"*": [
+	    "./main",
+	    "./vat1",
+            "./snapshot",
+	],
+    },
+    "creation": {
+        "keys": {
+            "available": 4096
+        },
+        "stack": 8192,
+    },
+    "preload": [
+    ],
+}
