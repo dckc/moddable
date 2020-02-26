@@ -117,7 +117,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             const delta = i32('delta'); // txIntegerValue is 32bits
             let self;
             if (delta > 0) {
-                self = u64(alldata.slice(delta, delta + 8));
+                self = u64(alldata.slice(delta + 4, delta + 4 + 8));
                 trace(`seen slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
                 return delta <= exitQty ? { exit: delta } : { self, delta };
             } else {

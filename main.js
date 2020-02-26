@@ -21,12 +21,14 @@ export default function main() {
         'Hello World',
         'Hello World'.repeat(20),
     ];
+    root.push(root); // Whee!!
 
-    trace(`root type: ${ typeof root }\n`); // JSON.stringify could run into circular structures.
-    trace(`root type: ${JSON.stringify(root.map(e => typeof e))}\n`);
+    // trace(`root type: ${ typeof root }\n`); // JSON.stringify could run into circular structures.
+    // trace(`root type: ${JSON.stringify(root.map(e => typeof e))}\n`);
     const exits = [Object.prototype, Array.prototype, String.prototype, true, 1];
-    trace(`[] prototype in exits? ${exits.indexOf(root.__proto__)}\n`);
+    // trace(`[] prototype in exits? ${exits.indexOf(root.__proto__)}\n`);
     const s1 = new Snapshot();
+    trace(`calling Snapshot.dump...\n`);
     const rawbuf = s1.dump(root, exits);
     trace(`snapshot: 0x${s1.tohex(rawbuf, 128)}\n`);
     const info = traceError(() => s1.restore(rawbuf, exits.length));

@@ -85,10 +85,12 @@ Each time we serialize a compound slot, we save either
 */
 static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue seen) {
   char *display = "[?]";
+  /*@@@
   if (target->kind == XS_REFERENCE_KIND && xsHas(*target, xsID("toString"))) {
     xsVar(1) = xsCall0(*target, xsID("toString"));
     display = xsToString(xsVar(1));
   }
+  */
   fprintf(stderr, "==== alreadySeen(%p) seen=%d %s?\n", target, seen, display);
 
   xsIntegerValue ix = 0;
