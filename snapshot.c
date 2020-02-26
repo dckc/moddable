@@ -1,3 +1,6 @@
+/**
+ */
+
 #include <assert.h>
 
 #include "xsAll.h"
@@ -12,6 +15,10 @@ void Snapshot_prototype_destructor(xsMachine* the)
 }
 
 
+/**
+ * REQUIRES: buf is an ArrayBuffer
+ * ENSURES: buf.length is at least size
+ */
 static void ensureSpace(xsMachine* the, txSlot* buf, xsIntegerValue size)
 {
   txInteger capacity = xsGetArrayBufferLength(*buf);
@@ -25,6 +32,10 @@ static void ensureSpace(xsMachine* the, txSlot* buf, xsIntegerValue size)
 }
 
 
+/**
+ * REQUIRES: buf is an ArrayBuffer
+ * ENSURES: buf.slice(offset, qty) == qty bytes at src
+ */
 static xsIntegerValue append(xsMachine* the, txSlot* buf, xsIntegerValue offset, void* src, xsIntegerValue qty)
 {
   // fprintf(stderr, "append(%d += %d)\n", offset, qty);
@@ -35,6 +46,10 @@ static xsIntegerValue append(xsMachine* the, txSlot* buf, xsIntegerValue offset,
 
 
 /** track "seen" slots
+ * REQUIRES: buf is an ArrayBuffer
+ *           xsArg(1) is an Array
+ *           xsVar(1) is available for storing toString() output
+ *           seen >= xsArg(1).length
 
 avoid infinite recursion for cyclic structures
 
@@ -49,15 +64,25 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, txSlot* buf, x
     xsVar(1) = xsCall0(*target, xsID("toString"));
     display = xsToString(xsVar(1));
   }
-  fprintf(stderr, "==== alreadySeen(%p) %s?\n", target, display);
+  fprintf(stderr, "==== alreadySeen(%p) seen=%d %s?\n", target, seen, display);
+
+  // xsArg(1) == exits
+  xsIntegerValue ix;
+  if ((ix = xsToInteger(xsCall1(xsArg(1), xsID("indexOf"), *target))) >= 0) {
+      fprintf(stderr, "===== yes %p is exit %d\n", target, seen);
+      return ix;
+  }
 
   if (target->kind == XS_INSTANCE_KIND
       && target == mxArrayPrototype.value.reference) {
     fprintf(stderr, "Array.prototype already seen! prototype=%p reference=%p\n",
             &mxArrayPrototype, mxArrayPrototype.value.reference);
+    xsSlot e1 = xsGetAt(xsArg(1), xsInteger(0));
+    fprintf(stderr, "exits[0] kind:%d reference:%p\n", e1.kind, e1.value.reference);
   }
 
-  while (seen >= 0) {
+  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+  while (seen >= exitQty) {
     xsIntegerValue delta;
     txSlot* candidate;
     xsGetArrayBufferData(*buf, seen + sizeof(delta), &candidate, sizeof(candidate));
@@ -66,16 +91,19 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, txSlot* buf, x
       return seen;
     }
     xsGetArrayBufferData(*buf, seen, &delta, sizeof(delta));
+    // fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
     seen += delta;
   }
-  fprintf(stderr, "===== no not seen %p\n", target);
+  fprintf(stderr, "===== no not seen %p exitQty=%d\n", target, exitQty);
   return -1;
 }
 
 
 static xsIntegerValue pushSelf(xsMachine* the, txSlot* self, txSlot* buf, xsIntegerValue offset, xsIntegerValue *seen) {
-  xsIntegerValue delta = (*seen >= 0 ? *seen : 0) - offset;
-  fprintf(stderr, "=== pushSelf %p; sizeof(delta) = %ld\n", self, sizeof(delta));
+  // xsArg(1) == exits
+  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+  xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
+  fprintf(stderr, "=== pushSelf %p offset %d\n", self, offset);
   xsIntegerValue found;
   if ((found = alreadySeen(the, self, buf, *seen)) >= 0) {
     fprintf(stderr, "==== pushSelf %p; alreadySeen at %d\n", self, found);
@@ -83,7 +111,8 @@ static xsIntegerValue pushSelf(xsMachine* the, txSlot* self, txSlot* buf, xsInte
     return -offset;
   }
   *seen = offset;
-  fprintf(stderr, "==== pushSelf(%p) delta=%d *seen=%d\n", self, delta, *seen);
+
+  fprintf(stderr, "==== pushSelf(%p) delta=%d (#%ld) *seen=%d offset:%d exitQty:%d\n", self, delta, sizeof(delta), *seen, offset, exitQty);
   offset = append(the, buf, offset, &delta, sizeof(delta));
   offset = append(the, buf, offset, &self, sizeof(self));
   return offset;
@@ -95,9 +124,10 @@ static xsIntegerValue dumpID(xsMachine* the, txSlot* buf, xsIntegerValue offset,
   if (id != 0 && id != -1) {
     char* value = fxGetKeyName(the, id);
     if (!value) {
-      fprintf(stderr, "==== ??? id=%d no name?\n", id);
+      fprintf(stderr, "==== ??? id=%d ??no name?\n", id);
       return offset;
     }
+    fprintf(stderr, "==== dumpID=%d %s\n", id, value);
     txU4 len = strlen(value);
     offset = append(the, buf, offset, &len, sizeof(len));
     offset = append(the, buf, offset, value, len);
@@ -179,7 +209,7 @@ static xsIntegerValue dumpSlot(xsMachine* the, txSlot* buf, xsIntegerValue offse
     return offset;
   }
 
-  fprintf(stderr, "== dumpSlot %p kind = %d\n", slot, slot->kind);
+  fprintf(stderr, "== dumpSlot %p kind:%d offset:%d\n", slot, slot->kind, offset);
   offset = append(the, buf, offset, &(slot->kind), sizeof(slot->kind));
 
   if (slot->kind < XS_REFERENCE_KIND) {
@@ -415,15 +445,26 @@ static xsIntegerValue dumpSlot(xsMachine* the, txSlot* buf, xsIntegerValue offse
 
 void Snapshot_prototype_dump(xsMachine* the)
 {
-  // ?? xsIntegerValue c = xsToInteger(xsArgc);
+  if (xsToInteger(xsArgc) != 2) {
+    mxTypeError("expected 2 arguments");
+  }
   xsSlot root = xsArg(0);
-  // TODO: exits = xsArg(1)
+  // xsArg(1) = exits
+  if (!xsIsInstanceOf(xsArg(1), xsArrayPrototype)) {
+    mxTypeError("expected array");
+  }
+
+  xsSlot exit0 = xsGetAt(xsArg(1), xsInteger(0));
+  fprintf(stderr, "exits[0] type:%d kind:%d reference:%p\n", xsTypeOf(exit0), exit0.kind, exit0.value.reference);
+
+  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+  xsIntegerValue seen = exitQty - 1;  // IDEA: use xsVars() for seen too
   xsVars(2);
-  xsVar(0) = xsArrayBuffer(NULL, 256);  // snapshot serialization
-  xsIntegerValue seen = -1;
+  xsVar(0) = xsArrayBuffer(NULL, exitQty);  // snapshot serialization
   // xsVar(1) is for seen.toString() temp space
 
-  xsIntegerValue size = dumpSlot(the, (txSlot*)&(xsVar(0)), 0, (txSlot*)&root, // ISSUE: xsSlot -> txSlot???
+  // IDEA: use xsVar(0) rather than passing buf around
+  xsIntegerValue size = dumpSlot(the, (txSlot*)&(xsVar(0)), exitQty, (txSlot*)&root, // ISSUE: xsSlot -> txSlot???
                                  &seen);
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
   xsSetArrayBufferLength(xsVar(0), size);
