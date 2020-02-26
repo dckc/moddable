@@ -6,6 +6,7 @@
 #include "xsAll.h"
 #include "xs.h"
 
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 void Snapshot_prototype_constructor(xsMachine* the)
 {
 }
@@ -13,19 +14,20 @@ void Snapshot_prototype_constructor(xsMachine* the)
 void Snapshot_prototype_destructor(xsMachine* the)
 {
 }
+#pragma GCC diagnostic warning "-Wunused-parameter"
 
 
 /**
- * REQUIRES: buf is an ArrayBuffer
+ * REQUIRES: xsVar(0) is an ArrayBuffer
  * ENSURES: buf.length is at least size
  */
-static void ensureSpace(xsMachine* the, txSlot* buf, xsIntegerValue size)
+static void ensureSpace(xsMachine* the, xsIntegerValue size)
 {
-  txInteger capacity = xsGetArrayBufferLength(*buf);
+  txInteger capacity = xsGetArrayBufferLength(xsVar(0));
   if (capacity < size) {
     xsIntegerValue nextQuantum = (size + 0x100) - (size % 0x100);
     // fprintf(stderr, "ensureSpace(%d) grow capacity %d -> %d\n", size, capacity, nextQuantum);
-    xsSetArrayBufferLength(*buf, nextQuantum);
+    xsSetArrayBufferLength(xsVar(0), nextQuantum);
   } else {
     // fprintf(stderr, "ensureSpace(%d) capacity %d ok\n", size, capacity);
   }
