@@ -17,7 +17,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
         return tohex(new Uint8Array(rawbuf), limit);
     }
 
-    load(rawbuf, exitQty) {
+    restore(rawbuf, exitQty) {
         const alldata = new Uint8Array(rawbuf);
         let data = alldata.slice(exitQty);
 
