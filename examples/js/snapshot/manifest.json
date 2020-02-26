@@ -6,7 +6,7 @@
 	"*": [
 	    "./main",
 	    "./vat1",
-            "./snapshot",
+            "$(MODULES)/data/snapshot/*",
 	],
     },
     "creation": {
