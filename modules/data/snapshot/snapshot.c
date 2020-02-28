@@ -1,4 +1,15 @@
 /**
+
+xsArg(1) is an Array (exits)
+
+xsVar(0) is snapshot serialization ArrayBuffer
+xsVar(1) is for seen.toString() temp space
+xsVar(2) thru 5 are for enumerating exits
+
+// a la fxPrintSlot
+// https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L946
+// ISSUE: addresses are non-deterministic; exposes runtime details. Snapshot object is hence powerful.
+// IDEA: consider protobuf? capnproto?
  */
 
 #include <assert.h>
@@ -6,8 +17,10 @@
 #include "xsAll.h"
 #include "xs.h"
 
-#define KEEP_NEXT 0
-#define SKIP_NEXT 1
+static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+static xsIntegerValue dumpSlot1(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+static xsIntegerValue dumpSlotOpt(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void Snapshot_prototype_constructor(xsMachine* the)
@@ -69,108 +82,15 @@ static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, x
 }
 
 
-/** track "seen" slots
- * REQUIRES: xsVar(0) is an ArrayBuffer
- *           xsArg(1) is an Array (exits)
- *           seen >= xsArg(1).length
- *           xsVar(1) is available for storing toString() output
- *           xsVar(2) thru 5 are available (for iterating over exits)
-
-avoid infinite recursion for cyclic structures
-
-Each time we serialize a compound slot, we save either
-  - the offset where it was already serialized; or
-  - the delta to the previous compound slot and
-    the address of this slot
-*/
-static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue seen) {
-  char *display = "[?]";
-  /*@@@
-  if (target->kind == XS_REFERENCE_KIND && xsHas(*target, xsID("toString"))) {
-    xsVar(1) = xsCall0(*target, xsID("toString"));
-    display = xsToString(xsVar(1));
-  }
-  */
-  fprintf(stderr, "==== alreadySeen(%p) seen=%d %s?\n", target, seen, display);
-
-  xsIntegerValue ix = 0;
-  xsVar(2) = xsEnumerate(xsArg(1));
-  for (;;) {
-    xsVar(3) = xsCall0(xsVar(2), xsID("next"));
-    // ISSUE: warning: operation on ‘the->stack’ may be undefined [-Wsequence-point]
-    if (xsTest(xsGet(xsVar(3), xsID("done"))))
-      break;
-    xsVar(4) = xsGet(xsVar(3), xsID("value"));
-    xsVar(5) = xsGetAt(xsArg(1), xsVar(4));
-    // fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
-    //         ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
-    if (fxIsSameSlot(the, &xsVar(5), target)
-        || fxGetInstance(the, &xsVar(5)) == target) {
-      fprintf(stderr, "===== yes %p is exit %d\n", target, ix);
-      return ix;
-    }
-    ix += 1;
-  }
-
-  if (fxIsSameValue(the, target, &mxArrayPrototype, 0)) {
-    fprintf(stderr, "!! target:%p == Array.prototype\n", target);
-  }
-
-  if (target->kind == XS_INSTANCE_KIND
-      && target == mxArrayPrototype.value.reference) {
-    fprintf(stderr, "Array.prototype already seen! prototype=%p reference=%p\n",
-            &mxArrayPrototype, mxArrayPrototype.value.reference);
-    xsSlot e1 = xsGetAt(xsArg(1), xsInteger(0));
-    fprintf(stderr, "exits[0] kind:%d reference:%p\n", e1.kind, e1.value.reference);
-  }
-
-  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
-  while (seen >= exitQty) {
-    xsIntegerValue delta;
-    txSlot* candidate;
-    xsGetArrayBufferData(xsVar(0), seen + sizeof(delta), &candidate, sizeof(candidate));
-    if (candidate == target) {
-      fprintf(stderr, "===== yes seen %p at %d\n", target, seen);
-      return seen;
-    }
-    xsGetArrayBufferData(xsVar(0), seen, &delta, sizeof(delta));
-    // fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
-    seen += delta;
-  }
-  fprintf(stderr, "===== no not seen %p exitQty=%d\n", target, exitQty);
-  return -1;
-}
-
-
-/**
- * REQUIRES: xsVar(0) is an ArrayBuffer
- */
-static xsIntegerValue pushSelf(xsMachine* the, txSlot* self, xsIntegerValue offset, xsIntegerValue *seen) {
-  // xsArg(1) == exits
-  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
-  xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
-  fprintf(stderr, "=== pushSelf %p offset %d\n", self, offset);
-  xsIntegerValue found;
-  if ((found = alreadySeen(the, self, *seen)) >= 0) {
-    fprintf(stderr, "==== pushSelf %p; alreadySeen at %d\n", self, found);
-    offset = append(the, offset, &found, sizeof(found));
-    return -offset;
-  }
-  *seen = offset;
-
-  fprintf(stderr, "==== pushSelf(%p) delta=%d (#%ld) *seen=%d offset:%d exitQty:%d\n", self, delta, sizeof(delta), *seen, offset, exitQty);
-  offset = append(the, offset, &delta, sizeof(delta));
-  offset = append(the, offset, &self, sizeof(self));
-  return offset;
-}
-
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
  *
  * NOTE: conflates null ID name with empty ID name
  */
-static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txID id)
+static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag, txID id)
 {
+  offset = append(the, offset, &flag, sizeof(flag));
+
   offset = append(the, offset, &id, sizeof(id));
   txU4 len = 0;
   char* value = fxGetKeyName(the, id);
@@ -181,26 +101,28 @@ static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txID id)
   if (value) {
     offset = append(the, offset, value, len);
   }
-  fprintf(stderr, "==== dumpID=%d %s\n", id, value);
+  fprintf(stderr, "==== @%d dumpID=%d %s\n", offset, id, value);
   return offset;
 }
 
+
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
+ * REQUIRES: slot->kind already appended
  */
-static xsIntegerValue dumpSimpleValue(xsMachine* the, xsIntegerValue offset, txSlot* slot)
+static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* slot)
 {
-  fprintf(stderr, "== dumpSimpleValue %p kind = %d\n", slot, slot->kind);
+  offset = dumpID(the, offset, slot->flag, slot->ID);
 
   switch(slot->kind) {
   case XS_UNINITIALIZED_KIND:
   case XS_UNDEFINED_KIND:
   case XS_NULL_KIND:
-    // ISSUE: .value = { .number = 0 }?
     break;
 
   case XS_BOOLEAN_KIND: {
     debug_push(">=%s", slot->value.boolean ? "true" : "false");
+    // ISSUE: 4 bytes for a boolean? really?
     offset = append(the, offset, &(slot->value.boolean), sizeof(slot->value.boolean));
     debug_pop();
   } break;
@@ -221,7 +143,7 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, xsIntegerValue offset, txS
   case XS_STRING_KIND:
   case XS_STRING_X_KIND: {
     txU4 len = strlen(slot->value.string);
-    debug_push(">= #%d '%.4s'", len, slot->value.string);
+    debug_push(">= '%.4s...' len:%d", slot->value.string, len);
     offset = append(the, offset, &len, sizeof(len));
     offset = append(the, offset, slot->value.string, len);
     debug_pop();
@@ -230,6 +152,7 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, xsIntegerValue offset, txS
   case XS_SYMBOL_KIND: {
     debug_push("> sym:%d", slot->value.symbol);
     offset = append(the, offset, &(slot->value.symbol), sizeof(slot->value.symbol));
+    debug_pop();
   } break;
     /*@@@@
 	case XS_BIGINT_KIND:
@@ -253,60 +176,65 @@ static xsIntegerValue dumpSimpleValue(xsMachine* the, xsIntegerValue offset, txS
 }
 
 
+
+
+
+/** detect "seen" slots
+ * REQUIRES: seen >= xsArg(1).length
+
+avoid infinite recursion for cyclic structures
+*/
+static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue seen) {
+  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+  fprintf(stderr, "=== %p in %d exits? seen=%d\n", target, exitQty, seen);
+  xsIntegerValue ix = 0;
+  xsVar(2) = xsEnumerate(xsArg(1));
+  for (;;) {
+    xsVar(3) = xsCall0(xsVar(2), xsID("next"));
+    // ISSUE: warning: operation on ‘the->stack’ may be undefined [-Wsequence-point]
+    if (xsTest(xsGet(xsVar(3), xsID("done"))))
+      break;
+    xsVar(4) = xsGet(xsVar(3), xsID("value"));
+    xsVar(5) = xsGetAt(xsArg(1), xsVar(4));
+    // fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
+    //         ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
+    if (fxIsSameSlot(the, &xsVar(5), target)
+        || fxGetInstance(the, &xsVar(5)) == target) {
+      fprintf(stderr, "=== %p EXIT %d\n", target, ix);
+      return ix;
+    }
+    ix += 1;
+  }
+
+  fprintf(stderr, "=== %p ibid? seen=%d\n", target, seen);
+  while (seen >= exitQty) {
+    xsIntegerValue delta;
+    txSlot* candidate;
+    xsGetArrayBufferData(xsVar(0), seen + sizeof(delta), &candidate, sizeof(candidate));
+    if (candidate == target) {
+      fprintf(stderr, "=== %p IBID %d\n", target, seen);
+      return seen;
+    }
+    xsGetArrayBufferData(xsVar(0), seen, &delta, sizeof(delta));
+    // fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
+    seen += delta;
+  }
+  fprintf(stderr, "=== %p FRESH\n", target);
+  return -1;
+}
+
+
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
  */
-// a la fxPrintSlot
-// https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L946
-// ISSUE: addresses are non-deterministic; exposes runtime details. Snapshot object is hence powerful.
-// IDEA: consider protobuf? capnproto?
-static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot,
-                               xsIntegerValue* seen, txBoolean skip_next)
+static xsIntegerValue dumpSlot2(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
 {
-  if (!slot) {
-    txKind null_slot_kind = XS_UNINITIALIZED_KIND - 1;
-    fprintf(stderr, "= dumpSlot %p\n", slot);
-    offset = append(the, offset, &null_slot_kind, sizeof(txKind));
-    return offset;
-  }
-
-  debug_push(">slot: %p kind:%d offset:%d", slot, slot->kind, offset);
-  offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
-
-  if (slot->kind < XS_REFERENCE_KIND) {
-    offset = append(the, offset, &(slot->flag), sizeof(slot->flag));
-    offset = dumpID(the, offset, slot->ID);
-    offset = dumpSimpleValue(the, offset, slot);
-    if (!skip_next) {
-      debug_push(">next");
-      offset = dumpSlot(the, offset, slot->next, seen, KEEP_NEXT);
-      debug_pop();
-    }
-    debug_pop();
-    return offset;
-  }
-
-  if ((offset = pushSelf(the, slot, offset, seen)) < 0) {
-    debug_pop();
-    return -offset;
-  }
-  offset = append(the, offset, &(slot->flag), sizeof(slot->flag));
-  offset = dumpID(the, offset, slot->ID);
+  offset = dumpID(the, offset, slot->flag, slot->ID);
 
   switch(slot->kind) {
   case XS_REFERENCE_KIND: {
-    if (slot->value.reference
-        && slot->value.reference == mxArrayPrototype.value.reference) {
-      fprintf(stderr, "found Array.prototype! slot=%p reference=%p\n",
-              slot, slot->value.reference);
-    }
-    if (slot->value.reference
-        && slot->value.reference->value.instance.prototype == mxArrayPrototype.value.reference) {
-      fprintf(stderr, "found Array! slot=%p reference=%p prototype=%p\n",
-              slot, slot->value.reference, slot->value.reference->value.instance.prototype);
-    }
     debug_push(">reference");
-    offset = dumpSlot(the, offset, slot->value.reference, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->value.reference, seen);
     debug_pop();
   } break;
           /*
@@ -320,7 +248,7 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
   case XS_INSTANCE_KIND: {
     // ISSUE: fprintf(file, ".value = { .instance = { NULL, ");
     debug_push(">prototype");
-    offset = dumpSlot(the, offset, slot->value.instance.prototype, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->value.instance.prototype, seen);
     debug_pop();
   } break;
   case XS_ARRAY_KIND: {
@@ -330,12 +258,11 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     while (size) {
       // ISSUE: XS_MARK_FLAG??
       debug_push(">item[%d]", size);
-      offset = dumpSlot(the, offset, item, seen, SKIP_NEXT);
+      offset = dumpSlot1(the, offset, item, seen);
       debug_pop();
       item++;
       size--;
     }
-    skip_next = 1;
   } break;
           /*
 	case XS_ARRAY_BUFFER_KIND: {
@@ -355,11 +282,11 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
             txChunk* chunk = (txChunk*)(slot->value.code.address - sizeof(txChunk));
             offset = append(the, offset, slot->value.code.address, chunk->size - sizeof(txChunk));
           }
-          offset = dumpSlot(the, offset, slot->value.code.closures, seen, KEEP_NEXT);
+          offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
 	} break;
 	case XS_CODE_X_KIND: {
           offset = append(the, offset, &slot->value.code.address, sizeof(slot->value.code.address));
-          offset = dumpSlot(the, offset, slot->value.code.closures, seen, KEEP_NEXT);
+          offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
 	} break;
           /*
 	case XS_DATE_KIND: {
@@ -455,10 +382,10 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
           */
   case XS_ACCESSOR_KIND: {
     debug_push(">getter");
-    offset = dumpSlot(the, offset, slot->value.accessor.getter, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->value.accessor.getter, seen);
     debug_pop();
     debug_push(">setter");
-    offset = dumpSlot(the, offset, slot->value.accessor.setter, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->value.accessor.setter, seen);
     debug_pop();
   } break;
           /*
@@ -479,10 +406,10 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
           */
   case XS_HOME_KIND: {
     debug_push(">home-object");
-    offset = dumpSlot(the, offset, slot->value.home.object, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->value.home.object, seen);
     debug_pop();
     debug_push(">home-module");
-    offset = dumpSlot(the, offset, slot->value.home.module, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->value.home.module, seen);
     debug_pop();
   } break;
           /*
@@ -533,12 +460,91 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     assert(0); //
   }
 
-  if (!skip_next) {
+  return offset;
+}
+
+/**
+Each time we serialize a compound slot, we save either
+  - the exit id; or
+  - the "ibid" offset where it was already serialized; or
+  - for a fresh slot:
+    - the delta to the previous compound slot and
+    - the address of this slot (redundant?), and
+    - the Slot2 contents
+*/
+static xsIntegerValue dumpComplex(xsMachine* the, txSlot* self, xsIntegerValue offset, xsIntegerValue *seen) {
+  // xsArg(1) == exits
+  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+  xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
+  fprintf(stderr, "=== %p @%d Complex\n", self, offset);
+  xsIntegerValue found;
+  if ((found = alreadySeen(the, self, *seen)) >= 0) {
+    offset = append(the, offset, &found, sizeof(found));
+    return -offset;
+  }
+  *seen = offset;
+
+  offset = append(the, offset, &delta, sizeof(delta));
+  offset = append(the, offset, &self, sizeof(self));
+  fprintf(stderr, "=== %p @%d delta:%d *seen=%d exitQty:%d\n", self, offset, delta, *seen, exitQty);
+
+  offset = dumpSlot2(the, offset, self, seen);
+
+  return offset;
+}
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ * NOTE: conflates null ID name with empty ID name
+ */
+static xsIntegerValue dumpSlot1(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
+{
+  fprintf(stderr, "slot1:\n");
+  debug_push(">@%d %p K:%d ", offset, slot, slot->kind);
+  offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
+  if (slot->kind < XS_REFERENCE_KIND) {
+    offset = dumpScalar(the, offset, slot);
+  } else {
+    offset = dumpComplex(the, slot, offset, seen);
+  }
+  debug_pop();
+  return offset;
+}
+
+
+static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
+{
+  debug_push(">dK:%d", slot->kind);
+  offset = dumpSlot1(the, offset, slot, seen);
+  if (offset < 0) { // seend; i.e. exit or ibid
+    return -offset;
+  }
+  if (slot->kind != XS_ARRAY_KIND) {
     debug_push(">next");
-    offset = dumpSlot(the, offset, slot->next, seen, KEEP_NEXT);
+    offset = dumpSlotOpt(the, offset, slot->next, seen);
     debug_pop();
   }
   debug_pop();
+  return offset;
+}
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ * REQUIRES: seen <= offset
+ * RETURNS: new offset after serializing None or Some(slot)
+ */
+static xsIntegerValue dumpSlotOpt(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
+{
+  if (!slot) {
+    // distinct from all XS slot kinds in xsAll.h
+    txKind null_slot_kind = XS_UNINITIALIZED_KIND - 1;
+    fprintf(stderr, "= dumpSlot %p\n", slot);
+    offset = append(the, offset, &null_slot_kind, sizeof(txKind));
+  } else {
+    offset = dumpSlot(the, offset, slot, seen);
+  }
   return offset;
 }
 
@@ -554,20 +560,13 @@ void Snapshot_prototype_dump(xsMachine* the)
     mxTypeError("expected array");
   }
 
-  xsSlot exit0 = xsGetAt(xsArg(1), xsInteger(0));
-  fprintf(stderr, "exits[0] type:%d kind:%d reference:%p\n", xsTypeOf(exit0), exit0.kind, exit0.value.reference);
-
   xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
   xsIntegerValue seen = exitQty - 1;  // IDEA: use xsVars() for seen too
   xsVars(6);
-  // xsVar(0) is snapshot serialization
   xsVar(0) = xsArrayBuffer(NULL, exitQty);
-  // xsVar(1) is for seen.toString() temp space
-  // xsVar(2) thru 5 are for enumerating exits
 
   debug_push(">root");
-  xsIntegerValue size = dumpSlot(the, exitQty, (txSlot*)&root, // ISSUE: xsSlot -> txSlot???
-                                 &seen, KEEP_NEXT);
+  xsIntegerValue size = dumpSlot(the, exitQty, (txSlot*)&root, &seen);
   debug_pop();
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
   xsSetArrayBufferLength(xsVar(0), size);

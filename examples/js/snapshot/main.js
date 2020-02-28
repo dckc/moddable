@@ -13,25 +13,31 @@ function traceError(thunk) {
     }
 }
 
-export default function main() {
-    const root = [
-        1, 2, 3,
-        true, false,
-        null, undefined,
-        'Hello World',
-        'Hello World'.repeat(20),
-    ];
-    root.push(root); // Whee!!
+const cases = [
+    { x: 1 },
+    undefined,
+    null,
+    true,
+    1,
+    // TODO: 1.5,
+    'Hello World',
+    'Hello World'.repeat(20),
+    [1, 2],
+];
 
-    // trace(`root type: ${ typeof root }\n`); // JSON.stringify could run into circular structures.
-    // trace(`root type: ${JSON.stringify(root.map(e => typeof e))}\n`);
+export default function main() {
     const exits = [Object.prototype, Array.prototype, String.prototype, true, 1];
-    // trace(`[] prototype in exits? ${exits.indexOf(root.__proto__)}\n`);
-    const s1 = new Snapshot();
-    trace(`calling Snapshot.dump...\n`);
-    const rawbuf = s1.dump(root, exits);
-    trace(`snapshot: 0x${s1.tohex(rawbuf, 128)}\n`);
-    const info = traceError(() => s1.restore(rawbuf, exits.length));
-    const { self, next, kind, flag, id, value } = info;
-    trace(`snapshot value: ${JSON.stringify({ self, next, kind, flag, id, value }, null, 2)}\n`);
+    const cycle = [1];
+    cycle.push(cycle);
+    cases.push(cycle);
+    for (const root of cases) {
+        const s1 = new Snapshot();
+        trace(`calling Snapshot.dump(type ${typeof root})...\n`);
+        const rawbuf = s1.dump(root, exits);
+
+        trace(`snapshot: 0x${s1.tohex(rawbuf, 128)}\n`);
+        const info = traceError(() => s1.restore(rawbuf, exits.length));
+        const { self, next, kind, flag, id, value } = info;
+        trace(`snapshot value: ${JSON.stringify({ self, next, kind, flag, id, value }, null, 2)}\n`);
+    }
 }
