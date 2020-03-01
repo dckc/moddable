@@ -1,11 +1,22 @@
 syntax = "proto3";
 
 message Slot {
-  SlotValue self = 1;
-  SlotOpt next = 2;
+  oneof tag {
+    uint32 exit = 1;
+    uint32 ibid = 2;
+    SlotTail fresh = 3;
+  }
 }
 
-message SlotValue {
+message SlotTail {
+  SlotID head = 1;
+  SlotOpt next = 5;  // ISSUE: Array has no next
+}
+
+message SlotId {
+  uint8 flag = 1;
+  int32 ID = 2;
+  bytes IDname 3; // optional?
   oneof kind {
     Scalar scalar = 1;
     Complex complex = 2;
@@ -13,10 +24,7 @@ message SlotValue {
 }
 
 message Scalar {
-  FlagId flag_id = 101;
-
   oneof kind {
-    // scalars
     Undefined undefined = 100;  // xs kind = 0
     Null null = 1;
     bool bool = 2;
@@ -30,12 +38,6 @@ message Scalar {
   }
 }
 
-message FlagID {
-  uint8 flag = 1;
-  int32 ID = 2;
-  bytes IDname 3; // optional?
-}
-
 message Undefined {
 }
 
@@ -43,16 +45,7 @@ message Null {
 }
 
 message Complex {
-  oneof tag {
-    uint32 exit = 1;
-    uint32 ibid = 2;
-    SlotFresh fresh = 2;
-  }
-}
-
-message SlotFresh {
   uint32 self = 1;
-  FlagId flag_id = 101;
   oneof kind {
     Reference reference = 10;
     // CLOSURE
@@ -94,7 +87,7 @@ message Instance {
 
 message Array {
   uint32 size = 1;
-  repeated Slot1 items = 2;
+  repeated SlotId items = 2;
 }
 
 message Code {
