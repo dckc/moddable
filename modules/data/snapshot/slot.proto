@@ -1,34 +1,16 @@
 syntax = "proto3";
 
-message SlotOpt {
-  oneof tag {
-    None none = 1;
-    Slot some = 2;
-  }
-}
-
-message None {
-}
-
 message Slot {
-  Slot1 self = 1;
+  SlotValue self = 1;
   SlotOpt next = 2;
 }
 
-message Slot1 {
+message SlotValue {
   oneof kind {
     Scalar scalar = 1;
     Complex complex = 2;
   }
 }
-
-
-message FlagID {
-  uint8 flag = 1;
-  int32 ID = 2;
-  bytes IDname 3; // optional?
-}
-
 
 message Scalar {
   FlagId flag_id = 101;
@@ -48,6 +30,12 @@ message Scalar {
   }
 }
 
+message FlagID {
+  uint8 flag = 1;
+  int32 ID = 2;
+  bytes IDname 3; // optional?
+}
+
 message Undefined {
 }
 
@@ -58,11 +46,11 @@ message Complex {
   oneof tag {
     uint32 exit = 1;
     uint32 ibid = 2;
-    Slot2 fresh = 2;
+    SlotFresh fresh = 2;
   }
 }
 
-message Slot2 {
+message SlotFresh {
   uint32 self = 1;
   FlagId flag_id = 101;
   oneof kind {
@@ -89,9 +77,19 @@ message Reference {
   SlotOpt instance = 1;
 }
 
+message SlotOpt {
+  oneof tag {
+    None none = 1;
+    Slot some = 2;
+  }
+}
+
+message None {
+}
+
 message Instance {
-  // garbage
-  SlotOpt prototype = 1;
+  // SlotOpt garbage = 1;
+  SlotOpt prototype = 2;
 }
 
 message Array {
@@ -108,7 +106,6 @@ message Accessor {
   SlotOpt getter = 1;
   SlotOpt setter = 2;
 }
-
 
 message Home {
   SlotOpt object = 1;
