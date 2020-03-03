@@ -263,8 +263,8 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
       break;
     xsVar(4) = xsGet(xsVar(3), xsID("value"));
     xsVar(5) = xsGetAt(xsArg(1), xsVar(4));
-    fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
-            ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
+    // fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
+    //        ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
     if (fxIsSameSlot(the, &xsVar(5), target)
         || fxGetInstance(the, &xsVar(5)) == target) {
       fprintf(stderr, "=== %p EXIT %d\n", target, ix);
@@ -283,7 +283,7 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
       return seen;
     }
     xsGetArrayBufferData(xsVar(0), seen, &delta, sizeof(delta));
-    fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
+    // fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
     seen += delta;
   }
   fprintf(stderr, "=== %p FRESH\n", target);
