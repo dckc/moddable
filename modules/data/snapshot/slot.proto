@@ -1,26 +1,48 @@
 syntax = "proto3";
 
 message Slot {
+  oneof kind {
+    Ibid ibid = 1;
+    Array array = 2;
+    Fresh fresh = 3;
+  }
+}
+
+message Ibid {
   oneof tag {
     uint32 exit = 1;
     uint32 ibid = 2;
-    SlotTail fresh = 3;
   }
 }
 
-message SlotTail {
-  SlotID head = 1;
-  SlotOpt next = 5;  // ISSUE: Array has no next
+message Array {
+  uint32 self = 1;
+  Fresh.Value.FlagId flag_id = 2;
+  uint32 size = 3;
+  repeated Item items = 4;
 }
 
-message SlotId {
-  uint8 flag = 1;
-  int32 ID = 2;
-  bytes IDname 3; // optional?
+message Item {
   oneof kind {
-    Scalar scalar = 1;
-    Complex complex = 2;
+    Ibid ibid = 1;
+    Array array = 2;
+    Fresh.Value fresh = 3;
   }
+}
+
+message Fresh {
+  message Value {
+    message FlagId {
+      uint32 flag = 4;  // one byte
+      int32 ID = 5;
+      bytes IDname = 6; // optional?
+    }
+    oneof kind2 {
+      Scalar scalar = 7;
+      Complex complex = 8;
+    }
+  }
+  SlotOpt next = 9;
 }
 
 message Scalar {
@@ -53,7 +75,7 @@ message Complex {
     Instance instance = 13;
     // arguments_sloppy
     // arguments_strict
-    Array array = 16;
+    // Array array = 16;
     // ...TODO?
     Code code = 20;
     // ...
@@ -83,11 +105,6 @@ message None {
 message Instance {
   // SlotOpt garbage = 1;
   SlotOpt prototype = 2;
-}
-
-message Array {
-  uint32 size = 1;
-  repeated SlotId items = 2;
 }
 
 message Code {

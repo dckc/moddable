@@ -3,9 +3,13 @@
 #include "xsAll.h"
 #include "xs.h"
 
+static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue seen);
+static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, xsIntegerValue qty);
+static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* slot);
 static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
-static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
 static xsIntegerValue dumpSlotOpt(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
 // ISSUE: debug print stuff should go away
 static void debug_push(char *format, ...);
 static void debug_pop();
@@ -25,8 +29,7 @@ void Snapshot_prototype_destructor(xsMachine* the)
 /**
 
 The snapshot format follows the type given in slot.proto;
-serialization details differ. (See also test cases in
-examples/js/snapshot/main.js)
+serialization details differ; see dumpSlot etc. for details.
 
 ISSUE: snapshot format includes slot memory addresses, which are
        non-deterministic. Snapshot object is hence powerful.  Is this
@@ -45,6 +48,7 @@ void Snapshot_prototype_dump(xsMachine* the)
   }
 
   xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+  // Initialize seen to 1 less than the lowest ibid.
   xsIntegerValue seen = exitQty - 1;
 
   // xsVar(0) is snapshot serialization ArrayBuffer
@@ -63,71 +67,59 @@ void Snapshot_prototype_dump(xsMachine* the)
   xsResult = xsVar(0);
 }
 
+
+/** Slot - Ibid, Fresh?
+
+First we append the XS kind. Scalars (< XS_REFERENCE_KIND) are always
+Fresh.
+
+Complex values start with a "delta" that distinguishes Ibid from
+Fresh.  A negative delta denotes Fresh and the delta points
+to the previous fresh compound slot. An exit is denoted by a delta
+between 0 and the number of exits; an ibid is given by a positive
+delta >= the number of exits.
+
+ */
 // a la fxPrintSlot
 // https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L946
 static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
 {
-  debug_push(">dK:%d", slot->kind);
-  offset = dumpSlotValue(the, offset, slot, seen);
-  if (offset < 0) { // seend; i.e. exit or ibid
-    return -offset;
-  }
-  if (slot->kind != XS_ARRAY_KIND) {
-    debug_push(">next");
-    offset = dumpSlotOpt(the, offset, slot->next, seen);
-    debug_pop();
+  debug_push(">@%d K:%d ", offset, slot->kind);
+  offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
+  xsIntegerValue ibid;
+  if (slot->kind >= XS_REFERENCE_KIND
+      && (ibid = alreadySeen(the, slot, *seen)) >= 0) {
+    // Ibid - < exits.length
+    offset = append(the, offset, &ibid, sizeof(ibid));
+  } else {
+    // Fresh
+    offset = dumpSlotValue(the, offset, slot, seen);
+    if (slot->kind != XS_ARRAY_KIND) {
+      offset = dumpSlotOpt(the, offset, slot->next, seen);
+    }
   }
   debug_pop();
   return offset;
 }
 
-
-static char debug_buf[1024] = { 0 };
-
-static void debug_push(char *format, ...) {
-  char *start = debug_buf + strlen(debug_buf);
-  va_list spread;
-  va_start(spread, format);
-  vsprintf(start, format, spread);
-  fprintf(stderr, ">%s\n", debug_buf);
-}
-
-static void debug_pop() {
-  char* last_dot = strrchr(debug_buf, '>');
-  fprintf(stderr, "<%s\n", debug_buf);
-  if (last_dot) {
-    *last_dot = 0;
-  }
-}
-
-
 /**
- * REQUIRES: xsVar(0) is an ArrayBuffer
- * ENSURES: buf.length is at least size
- */
-static void ensureSpace(xsMachine* the, xsIntegerValue size)
+Arrays omit the "next" slot for both the elements and the Array itself.
+*/
+static xsIntegerValue dumpItem(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
 {
-  txInteger capacity = xsGetArrayBufferLength(xsVar(0));
-  if (capacity < size) {
-    xsIntegerValue nextQuantum = (size + 0x100) - (size % 0x100);
-    // fprintf(stderr, "ensureSpace(%d) grow capacity %d -> %d\n", size, capacity, nextQuantum);
-    xsSetArrayBufferLength(xsVar(0), nextQuantum);
+  debug_push(">@%d %p item K:%d ", offset, slot, slot->kind);
+  offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
+  xsIntegerValue ibid;
+  if (slot->kind >= XS_REFERENCE_KIND
+      && (ibid = alreadySeen(the, slot, *seen)) >= 0) {
+    // Ibid - < exits.length
+    offset = append(the, offset, &ibid, sizeof(ibid));
   } else {
-    // fprintf(stderr, "ensureSpace(%d) capacity %d ok\n", size, capacity);
+    // Fresh
+    offset = dumpSlotValue(the, offset, slot, seen);
   }
-}
-
-
-/**
- * REQUIRES: xsVar(0) is an ArrayBuffer
- * ENSURES: buf.slice(offset, qty) == qty bytes at src
- */
-static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, xsIntegerValue qty)
-{
-  // fprintf(stderr, "append(%d += %d)\n", offset, qty);
-  ensureSpace(the, offset + qty);
-  xsSetArrayBufferData(xsVar(0), offset, src, qty);
-  return offset + qty;
+  debug_pop();
+  return offset;
 }
 
 
@@ -139,7 +131,6 @@ static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, x
 static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag, txID id)
 {
   offset = append(the, offset, &flag, sizeof(flag));
-
   offset = append(the, offset, &id, sizeof(id));
   txU4 len = 0;
   char* value = fxGetKeyName(the, id);
@@ -157,12 +148,41 @@ static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag,
 
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
+ *
+ * For scalar values, we append the flag and ID and then kind-specific data.
+ *
+ * For (fresh) Complex values, we append the delta and the identity /
+ * address of the slot followed by flag and ID and then kind-specific data.
+ */
+static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue *seen)
+{
+  fprintf(stderr, "slotValue:\n");
+  debug_push(">@%d %p K:%d ", offset, slot, slot->kind);
+  if (slot->kind < XS_REFERENCE_KIND) {
+    offset = dumpID(the, offset, slot->flag, slot->ID);
+    offset = dumpScalar(the, offset, slot);
+  } else {
+    fprintf(stderr, "=== %p @%d Complex\n", slot, offset);
+    xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
+    xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
+    *seen = offset;
+    offset = append(the, offset, &delta, sizeof(delta));
+    offset = append(the, offset, &slot, sizeof(slot));
+    fprintf(stderr, "=== %p @%d delta:%d *seen=%d exitQty:%d\n", slot, offset, delta, *seen, exitQty);
+    offset = dumpID(the, offset, slot->flag, slot->ID);
+    offset = dumpComplex(the, offset, slot, seen);
+  }
+  debug_pop();
+
+  return offset;
+}
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
  * REQUIRES: slot->kind already appended
  */
 static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* slot)
 {
-  offset = dumpID(the, offset, slot->flag, slot->ID);
-
   switch(slot->kind) {
   case XS_UNINITIALIZED_KIND:
   case XS_UNDEFINED_KIND:
@@ -226,9 +246,6 @@ static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* 
 }
 
 
-
-
-
 /** detect "seen" slots
  * REQUIRES: seen >= xsArg(1).length
 
@@ -246,8 +263,8 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
       break;
     xsVar(4) = xsGet(xsVar(3), xsID("value"));
     xsVar(5) = xsGetAt(xsArg(1), xsVar(4));
-    // fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
-    //         ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
+    fprintf(stderr, "exits[%d] kind %d ref %p == target %p?\n",
+            ix, xsVar(5).kind, fxGetInstance(the, &xsVar(5)), target);
     if (fxIsSameSlot(the, &xsVar(5), target)
         || fxGetInstance(the, &xsVar(5)) == target) {
       fprintf(stderr, "=== %p EXIT %d\n", target, ix);
@@ -266,7 +283,7 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
       return seen;
     }
     xsGetArrayBufferData(xsVar(0), seen, &delta, sizeof(delta));
-    // fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
+    fprintf(stderr, "=== seen loop: seen:%d exitQty:%d delta:%d\n", seen, exitQty, delta);
     seen += delta;
   }
   fprintf(stderr, "=== %p FRESH\n", target);
@@ -277,10 +294,8 @@ static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
  */
-static xsIntegerValue dumpSlotFresh(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
+static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
 {
-  offset = dumpID(the, offset, slot->flag, slot->ID);
-
   switch(slot->kind) {
   case XS_REFERENCE_KIND: {
     debug_push(">reference");
@@ -308,7 +323,7 @@ static xsIntegerValue dumpSlotFresh(xsMachine* the, xsIntegerValue offset, txSlo
     while (size) {
       // ISSUE: XS_MARK_FLAG??
       debug_push(">item[%d]", size);
-      offset = dumpSlotValue(the, offset, item, seen);
+      offset = dumpItem(the, offset, item, seen);
       debug_pop();
       item++;
       size--;
@@ -514,56 +529,6 @@ static xsIntegerValue dumpSlotFresh(xsMachine* the, xsIntegerValue offset, txSlo
 }
 
 /**
-Each time we serialize a compound slot, we save either
-  - the exit id; or
-  - the "ibid" offset where it was already serialized; or
-  - for a fresh slot:
-    - the delta to the previous compound slot and
-    - the address of this slot (redundant?), and
-    - the SlotFresh contents
-*/
-static xsIntegerValue dumpComplex(xsMachine* the, txSlot* self, xsIntegerValue offset, xsIntegerValue *seen) {
-  // xsArg(1) == exits
-  xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
-  xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
-  fprintf(stderr, "=== %p @%d Complex\n", self, offset);
-  xsIntegerValue found;
-  if ((found = alreadySeen(the, self, *seen)) >= 0) {
-    offset = append(the, offset, &found, sizeof(found));
-    return -offset;
-  }
-  *seen = offset;
-
-  offset = append(the, offset, &delta, sizeof(delta));
-  offset = append(the, offset, &self, sizeof(self));
-  fprintf(stderr, "=== %p @%d delta:%d *seen=%d exitQty:%d\n", self, offset, delta, *seen, exitQty);
-
-  offset = dumpSlotFresh(the, offset, self, seen);
-
-  return offset;
-}
-
-
-/**
- * REQUIRES: xsVar(0) is an ArrayBuffer
- * NOTE: conflates null ID name with empty ID name
- */
-static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
-{
-  fprintf(stderr, "slotValue:\n");
-  debug_push(">@%d %p K:%d ", offset, slot, slot->kind);
-  offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
-  if (slot->kind < XS_REFERENCE_KIND) {
-    offset = dumpScalar(the, offset, slot);
-  } else {
-    offset = dumpComplex(the, slot, offset, seen);
-  }
-  debug_pop();
-  return offset;
-}
-
-
-/**
  * REQUIRES: xsVar(0) is an ArrayBuffer
  * REQUIRES: seen <= offset
  * RETURNS: new offset after serializing None or Some(slot)
@@ -579,4 +544,52 @@ static xsIntegerValue dumpSlotOpt(xsMachine* the, xsIntegerValue offset, txSlot*
     offset = dumpSlot(the, offset, slot, seen);
   }
   return offset;
+}
+
+static char debug_buf[1024] = { 0 };
+
+static void debug_push(char *format, ...) {
+  char *start = debug_buf + strlen(debug_buf);
+  va_list spread;
+  va_start(spread, format);
+  vsprintf(start, format, spread);
+  fprintf(stderr, ">%s\n", debug_buf);
+}
+
+static void debug_pop() {
+  char* last_dot = strrchr(debug_buf, '>');
+  fprintf(stderr, "<%s\n", debug_buf);
+  if (last_dot) {
+    *last_dot = 0;
+  }
+}
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ * ENSURES: buf.length is at least size
+ */
+static void ensureSpace(xsMachine* the, xsIntegerValue size)
+{
+  txInteger capacity = xsGetArrayBufferLength(xsVar(0));
+  if (capacity < size) {
+    xsIntegerValue nextQuantum = (size + 0x100) - (size % 0x100);
+    // fprintf(stderr, "ensureSpace(%d) grow capacity %d -> %d\n", size, capacity, nextQuantum);
+    xsSetArrayBufferLength(xsVar(0), nextQuantum);
+  } else {
+    // fprintf(stderr, "ensureSpace(%d) capacity %d ok\n", size, capacity);
+  }
+}
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ * ENSURES: buf.slice(offset, qty) == qty bytes at src
+ */
+static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, xsIntegerValue qty)
+{
+  // fprintf(stderr, "append(%d += %d)\n", offset, qty);
+  ensureSpace(the, offset + qty);
+  xsSetArrayBufferData(xsVar(0), offset, src, qty);
+  return offset + qty;
 }
