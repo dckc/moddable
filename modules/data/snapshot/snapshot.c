@@ -213,7 +213,7 @@ static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* 
   case XS_STRING_KIND:
   case XS_STRING_X_KIND: {
     txU4 len = strlen(slot->value.string);
-    debug_push(">= '%.4s...' len:%d", slot->value.string, len);
+    debug_push(">= '%.16s...' len:%d", slot->value.string, len);
     offset = append(the, offset, &len, sizeof(len));
     offset = append(the, offset, slot->value.string, len);
     debug_pop();
@@ -302,14 +302,9 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
     offset = dumpSlotOpt(the, offset, slot->value.reference, seen);
     debug_pop();
   } break;
-          /*
-	case XS_CLOSURE_KIND: {
-		fprintf(file, ".kind = XS_CLOSURE_KIND}, ");
-		fprintf(file, ".value = { .closure = ");
-		fxPrintAddress(the, file, slot->value.closure);
-		fprintf(file, " } ");
-	} break;
-          */
+  case XS_CLOSURE_KIND: {
+    offset = dumpSlotOpt(the, offset, slot->value.closure, seen);
+  } break;
   case XS_INSTANCE_KIND: {
     // ISSUE: fprintf(file, ".value = { .instance = { NULL, ");
     debug_push(">prototype");
@@ -345,13 +340,16 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
           // .code =
           {
             txChunk* chunk = (txChunk*)(slot->value.code.address - sizeof(txChunk));
+            int size = chunk->size - sizeof(txChunk);
+            offset = append(the, offset, &size, sizeof(size));
             offset = append(the, offset, slot->value.code.address, chunk->size - sizeof(txChunk));
           }
           offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
 	} break;
 	case XS_CODE_X_KIND: {
-          offset = append(the, offset, &slot->value.code.address, sizeof(slot->value.code.address));
-          offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
+          fprintf(stderr, "TODO! XS_CODE_KIND: %p\n", slot->value.code.address);
+          // offset = append(the, offset, &slot->value.code.address, sizeof(slot->value.code.address));
+          // offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
 	} break;
           /*
 	case XS_DATE_KIND: {
@@ -392,12 +390,13 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
 		c_memcpy(linker->slotData + linker->slotSize, slot->value.table.address, slot->value.table.length * sizeof(txSlot*));
 		linker->slotSize += slot->value.table.length;
 	} break;
+          */
 	case XS_MODULE_KIND: {
-		fprintf(file, ".kind = XS_MODULE_KIND}, ");
-		fprintf(file, ".value = { .module = { ");
-		fxPrintAddress(the, file, slot->value.module.realm);
-		fprintf(file, ", %d } }", slot->value.module.id);
+          fprintf(stderr, "@@TODO! XS_MODULE_KIND %p %d\n", slot->value.module.realm, slot->value.module.id);
+          // offset = dumpSlotOpt(the, offset, slot->value.module.realm, seen);
+          // offset = append(the, offset, &(slot->value.module.id), sizeof(slot->value.module.id));
 	} break;
+          /*
 	case XS_PROMISE_KIND: {
 		fprintf(file, ".kind = XS_PROMISE_KIND}, ");
 		fprintf(file, ".value = { .integer = %d } ", slot->value.integer);
@@ -470,22 +469,21 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
 	} break;
           */
   case XS_HOME_KIND: {
+    fprintf(stderr, "@@TODO! XS_HOME_KIND %p %p\n", slot->value.home.object, slot->value.home.module);
+    /*
     debug_push(">home-object");
     offset = dumpSlotOpt(the, offset, slot->value.home.object, seen);
     debug_pop();
     debug_push(">home-module");
     offset = dumpSlotOpt(the, offset, slot->value.home.module, seen);
     debug_pop();
+    */
   } break;
-          /*
 	case XS_EXPORT_KIND: {
-		fprintf(file, ".kind = XS_EXPORT_KIND}, ");
-		fprintf(file, ".value = { .export = { ");
-		fxPrintAddress(the, file, slot->value.export.closure);
-		fprintf(file, ", ");
-		fxPrintAddress(the, file, slot->value.export.module);
-		fprintf(file, " } }");
+          offset = dumpSlotOpt(the, offset, slot->value.export.closure, seen);
+          offset = dumpSlotOpt(the, offset, slot->value.export.module, seen);
 	} break;
+          /*
 	case XS_KEY_KIND:
 	case XS_KEY_X_KIND: {
 		fprintf(file, ".kind = XS_KEY_X_KIND}, ");

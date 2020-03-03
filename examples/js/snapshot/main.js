@@ -1,4 +1,4 @@
-/* global Compartment, trace, snapshot */
+/* global Compartment, trace, snapshot, globalThis */
 
 trace(`in main module\n`);
 
@@ -14,6 +14,12 @@ function traceError(thunk) {
 }
 
 const cases = [
+    {
+        input: function f1() { return 'whee!'; },
+    },
+    {
+        input: () => 1,
+    },
     {
         input: undefined,
         parts: [
@@ -71,7 +77,7 @@ const cases = [
 ];
 
 export default function main() {
-    const exits = [Object.prototype, Array.prototype, String.prototype, true, 1];
+    const exits = [Object.prototype, Array.prototype, String.prototype, Function.prototype, globalThis];
     const cycle = [1];
     cycle.push(cycle);
     cases.push({ input: cycle });
