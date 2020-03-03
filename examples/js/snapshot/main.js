@@ -36,7 +36,9 @@ const cases = [
         input: 1,
         struct: { next: null, kind: 3, flag: 0, id: 0, value: 1 },
     },
-    // TODO: 1.5,
+    {
+        input: 1.5,
+    },
     {
         input: 'Hello World',
         struct: { next: null, kind: 6, flag: 0, id: 0, value: "Hello World" },

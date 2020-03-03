@@ -18,43 +18,49 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
     }
 
     restore(rawbuf, exitQty) {
+        const dv = new DataView(rawbuf);
         const alldata = new Uint8Array(rawbuf);
         let data = alldata.slice(exitQty);
+        let offset = exitQty;
 
         function go(qty, label) {
             const used = data.slice(0, qty);
             data = data.slice(qty);
-            trace(`go(${qty}, ${label}) ${tohex(used)} => ${tohex(data, 16)}\n`);
+            offset += qty;
+            trace(`go(${qty}, ${label}) ${tohex(used)} => @${offset} ${tohex(data, 16)}\n`);
         }
 
         // IDEA/TODO: use DataView.getUint8 etc.
         const u8 = (label) => {
-            const x = data[0];
+            const x = dv.getUint8(offset);
             go(1, label);
             return x;
         };
         const i8 = (label) => {
-            const u = u8(label);
-            return u >= 0x80 ? (-1 - ((~u) & 0x7f)) : u;
+            const x = dv.getInt8(offset);
+            go(1, label);
+            return x;
         };
         const u16 = (label) => {
-            const x = data[0] + data[1] * 0x100;
+            const x = dv.getUint16(offset, true);
             go(2, label);
             return x;
         };
         const i16 = (label) => {
-            const u = u16(label);
-            return u >= 0x8000 ? (-1 - ((~u) & 0x7fff)) : u;
+            const x = dv.getInt16(offset, true);
+            go(2, label);
+            return x;
         };
         const u32 = (label) => {
-            const x = data[0] + 0x100 * (data[1] + 0x100 * (data[2] + 0x100 * data[3]));
+            const x = dv.getUint32(offset, true);
             go(4, label);
             return x;
         };
         const i32 = (label) => {
-            const u = u32(label);
+            const x = dv.getInt32(offset, true);
+            go(4, label);
             // trace(`i32: ${u >= 0x80000000} ? ${(~u - 1)} : ${u}\n`);
-            return u >= 0x80000000 ? (-1 - ((~u) & 0x7fffffff)) : u;
+            return x;
         };
         const chars = (label) => {
             const len = u32('len');
@@ -62,12 +68,15 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             go(len, label);
             return s;
         };
-        const u64 = data => data[0] + 0x100 * (data[1] + 0x100 *
-                                               (data[2] + 0x100 * (data[3] + 0x100 *
-                                                 (data[4] + 0x100 * (data[5] + 0x100 *
-                                                   (data[6] + 0x100 * data[7]))))));
+        // ISSUE: overflow
+        const u64 = (offset) => dv.getUint32(offset, true) + 0x100000000 * dv.getUint32(offset + 4, true);
         const u64go = (label) => {
-            const x = u64(data);
+            const x = u64(offset);
+            go(8, label);
+            return x;
+        };
+        const double = (label) => {
+            const x = dv.getFloat64(offset, true);
             go(8, label);
             return x;
         };
@@ -101,6 +110,9 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                     break;
                 case 3: // XS_INTEGER_KIND
                     value = i32('int');
+                    break;
+                case 4: // XS_NUMBER_KIND
+                    value = double('number');
                     break;
                 case 5: // XS_STRING_KIND
                 case 6: // XS_STRING_X_KIND
