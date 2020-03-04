@@ -95,7 +95,9 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
     // Fresh
     offset = dumpSlotValue(the, offset, slot, seen);
     if (slot->kind != XS_ARRAY_KIND) {
+      debug_push(">next");
       offset = dumpSlotOpt(the, offset, slot->next, seen);
+      debug_pop();
     }
   }
   debug_pop();
@@ -107,7 +109,6 @@ Arrays omit the "next" slot for both the elements and the Array itself.
 */
 static xsIntegerValue dumpItem(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
 {
-  debug_push(">@%d %p item K:%d ", offset, slot, slot->kind);
   offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
   xsIntegerValue ibid;
   if (slot->kind >= XS_REFERENCE_KIND
@@ -118,7 +119,6 @@ static xsIntegerValue dumpItem(xsMachine* the, xsIntegerValue offset, txSlot* sl
     // Fresh
     offset = dumpSlotValue(the, offset, slot, seen);
   }
-  debug_pop();
   return offset;
 }
 
@@ -140,8 +140,11 @@ static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag,
   offset = append(the, offset, &len, sizeof(len));
   if (value) {
     offset = append(the, offset, value, len);
+    fprintf(stderr, "@%d .%s [%d]\n", offset, value, id);
+    debug_push(">.%s", value);
+  } else {
+    debug_push(">id:%d", id);
   }
-  fprintf(stderr, "==== @%d dumpID=%d %s\n", offset, id, value);
   return offset;
 }
 
@@ -156,23 +159,22 @@ static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag,
  */
 static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue *seen)
 {
-  fprintf(stderr, "slotValue:\n");
-  debug_push(">@%d %p K:%d ", offset, slot, slot->kind);
   if (slot->kind < XS_REFERENCE_KIND) {
-    offset = dumpID(the, offset, slot->flag, slot->ID);
+    offset = dumpID(the, offset, slot->flag, slot->ID); // includes debug_push
     offset = dumpScalar(the, offset, slot);
+    debug_pop();
   } else {
-    fprintf(stderr, "=== %p @%d Complex\n", slot, offset);
+    debug_push(">fresh %p", slot);
     xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
     xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
     *seen = offset;
     offset = append(the, offset, &delta, sizeof(delta));
     offset = append(the, offset, &slot, sizeof(slot));
-    fprintf(stderr, "=== %p @%d delta:%d *seen=%d exitQty:%d\n", slot, offset, delta, *seen, exitQty);
-    offset = dumpID(the, offset, slot->flag, slot->ID);
+    offset = dumpID(the, offset, slot->flag, slot->ID); // includes debug_push
     offset = dumpComplex(the, offset, slot, seen);
+    debug_pop();
+    debug_pop();
   }
-  debug_pop();
 
   return offset;
 }
@@ -190,21 +192,21 @@ static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* 
     break;
 
   case XS_BOOLEAN_KIND: {
-    debug_push(">=%s", slot->value.boolean ? "true" : "false");
+    debug_push("> =%s", slot->value.boolean ? "true" : "false");
     // ISSUE: 4 bytes for a boolean? really?
     offset = append(the, offset, &(slot->value.boolean), sizeof(slot->value.boolean));
     debug_pop();
   } break;
 
   case XS_INTEGER_KIND: {
-    debug_push(">=%d", slot->value.integer);
+    debug_push("> =%d", slot->value.integer);
     offset = append(the, offset, &(slot->value.integer), sizeof(slot->value.integer));
     debug_pop();
   } break;
 
   case XS_NUMBER_KIND: {
     // ISSUE: assume IEEE double format?
-    debug_push(">=%f", slot->value.number);
+    debug_push("> =%f", slot->value.number);
     offset = append(the, offset, &(slot->value.number), sizeof(slot->value.number));
     debug_pop();
   } break;
@@ -213,7 +215,7 @@ static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* 
   case XS_STRING_KIND:
   case XS_STRING_X_KIND: {
     txU4 len = strlen(slot->value.string);
-    debug_push(">= '%.16s...' len:%d", slot->value.string, len);
+    debug_push("> ='%.16s...' len:%d", slot->value.string, len);
     offset = append(the, offset, &len, sizeof(len));
     offset = append(the, offset, slot->value.string, len);
     debug_pop();
@@ -253,7 +255,7 @@ avoid infinite recursion for cyclic structures
 */
 static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue seen) {
   xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
-  fprintf(stderr, "=== %p in %d exits? seen=%d\n", target, exitQty, seen);
+  fprintf(stderr, "=== %p in %d exits?\n", target, exitQty);
   xsIntegerValue ix = 0;
   xsVar(2) = xsEnumerate(xsArg(1));
   for (;;) {
@@ -317,7 +319,7 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
     offset = append(the, offset, &size, sizeof(size));
     while (size) {
       // ISSUE: XS_MARK_FLAG??
-      debug_push(">item[%d]", size);
+      debug_push(">@%d item[%d] K:%d", offset, size, item->kind);
       offset = dumpItem(the, offset, item, seen);
       debug_pop();
       item++;
@@ -347,7 +349,7 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
           offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
 	} break;
 	case XS_CODE_X_KIND: {
-          fprintf(stderr, "TODO! XS_CODE_KIND: %p\n", slot->value.code.address);
+          fprintf(stderr, "TODO! XS_CODE_X_KIND: %p\n", slot->value.code.address);
           // offset = append(the, offset, &slot->value.code.address, sizeof(slot->value.code.address));
           // offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
 	} break;

@@ -129,9 +129,15 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             const delta = i32('delta'); // txIntegerValue is 32bits
             let self;
             if (delta >= 0) {
-                self = u64(alldata.slice(delta + 4, delta + 4 + 8));
-                trace(`seen slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
-                return delta <= exitQty ? { exit: delta } : { self, delta };
+                if (delta <= exitQty) {
+                    value = { exit: delta };
+                    trace(`exit: ${delta}\n`);
+                } else {
+                    self = u64(delta + 4);
+                    value = { self, delta };
+                    trace(`seen slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
+                }
+                return value;
             } else {
                 self = u64go('self');
                 trace(`fresh slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
@@ -157,9 +163,10 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 skip_next = true;
                 break;
             case 20: // XS_CODE_X_KIND
-                const address = u64go('code.address');
-                const closures = slot();
-                value = { address, closures };
+                value = ['TODO: XS_CODE_X_KIND', self];
+                // const address = u64go('code.address');
+                // const closures = slot();
+                // value = { address, closures };
                 break;
             case 37: // XS_ACCESSOR_KIND
                 const getter = slot();
@@ -167,9 +174,10 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 value = { getter, setter };
                 break;
             case 41: // XS_HOME_KIND
-                const object = slot();
-                const module = slot();
-                value = { object, module };
+                value = ['TODO: XS_HOME_KIND', self]
+                // const object = slot();
+                // const module = slot();
+                // value = { object, module };
                 break;
             case 48: // XS_CALLBACK_X_KIND
                 const cb_addr = u64go('callback.address');
@@ -180,7 +188,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 throw new RangeError(kind);
             }
             const next = skip_next ? null : slot();
-            trace(`compound: ${JSON.stringify({ kind, self, flag, id, idname, value, next }, null, 2)}\n`);
+            // trace(`compound: ${JSON.stringify({ kind, self, flag, id, idname, value, next }, null, 2)}\n`);
             return { kind, self, flag, id, idname, value, next };
         }
         return slot();
