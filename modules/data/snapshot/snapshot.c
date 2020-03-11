@@ -9,6 +9,8 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
 static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* slot);
 static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
 static xsIntegerValue dumpSlotOpt(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+static xsIntegerValue dumpSlotList(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
+static xsIntegerValue dumpProperties(xsMachine* the, xsIntegerValue offset, txSlot* instance, xsIntegerValue* seen);
 static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen);
 // ISSUE: debug print stuff should go away
 static void debug_push(char *format, ...);
@@ -59,7 +61,7 @@ void Snapshot_prototype_dump(xsMachine* the)
 
   xsVar(0) = xsArrayBuffer(NULL, exitQty);
 
-  debug_push(">root");
+  debug_push(">*");
   xsIntegerValue size = dumpSlot(the, exitQty, (txSlot*)&root, &seen);
   debug_pop();
   fprintf(stderr, "dump: xsSetArrayBufferLength(size=%d)\n", size);
@@ -84,7 +86,7 @@ delta >= the number of exits.
 // https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L946
 static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
 {
-  debug_push(">@%d K:%d ", offset, slot->kind);
+  fprintf(stderr, "== @%d K:%d\n", offset, slot->kind);
   offset = append(the, offset, &(slot->kind), sizeof(slot->kind));
   xsIntegerValue ibid;
   if (slot->kind >= XS_REFERENCE_KIND
@@ -94,13 +96,7 @@ static xsIntegerValue dumpSlot(xsMachine* the, xsIntegerValue offset, txSlot* sl
   } else {
     // Fresh
     offset = dumpSlotValue(the, offset, slot, seen);
-    if (slot->kind != XS_ARRAY_KIND) {
-      debug_push(">next");
-      offset = dumpSlotOpt(the, offset, slot->next, seen);
-      debug_pop();
-    }
   }
-  debug_pop();
   return offset;
 }
 
@@ -140,10 +136,9 @@ static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag,
   offset = append(the, offset, &len, sizeof(len));
   if (value) {
     offset = append(the, offset, value, len);
-    fprintf(stderr, "@%d .%s [%d]\n", offset, value, id);
-    debug_push(">.%s", value);
+    fprintf(stderr, "@%d .%s [%d] F:%02x\n", offset, value, id, flag);
   } else {
-    debug_push(">id:%d", id);
+    fprintf(stderr, "@%d .? [%d] F:%02x\n", offset, id, flag);
   }
   return offset;
 }
@@ -160,20 +155,17 @@ static xsIntegerValue dumpID(xsMachine* the, xsIntegerValue offset, txFlag flag,
 static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue *seen)
 {
   if (slot->kind < XS_REFERENCE_KIND) {
-    offset = dumpID(the, offset, slot->flag, slot->ID); // includes debug_push
+    offset = dumpID(the, offset, slot->flag, slot->ID);
     offset = dumpScalar(the, offset, slot);
-    debug_pop();
   } else {
-    debug_push(">fresh %p", slot);
+    fprintf(stderr, "== fresh %p\n", slot);
     xsIntegerValue exitQty = xsToInteger(xsGet(xsArg(1), xsID("length")));
     xsIntegerValue delta = (*seen >= exitQty ? *seen : exitQty) - offset;
     *seen = offset;
     offset = append(the, offset, &delta, sizeof(delta));
     offset = append(the, offset, &slot, sizeof(slot));
-    offset = dumpID(the, offset, slot->flag, slot->ID); // includes debug_push
+    offset = dumpID(the, offset, slot->flag, slot->ID);
     offset = dumpComplex(the, offset, slot, seen);
-    debug_pop();
-    debug_pop();
   }
 
   return offset;
@@ -192,39 +184,34 @@ static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* 
     break;
 
   case XS_BOOLEAN_KIND: {
-    debug_push("> =%s", slot->value.boolean ? "true" : "false");
+    fprintf(stderr, "==== =%s\n", slot->value.boolean ? "true" : "false");
     // ISSUE: 4 bytes for a boolean? really?
     offset = append(the, offset, &(slot->value.boolean), sizeof(slot->value.boolean));
-    debug_pop();
   } break;
 
   case XS_INTEGER_KIND: {
-    debug_push("> =%d", slot->value.integer);
+    fprintf(stderr, "==== =%d\n", slot->value.integer);
     offset = append(the, offset, &(slot->value.integer), sizeof(slot->value.integer));
-    debug_pop();
   } break;
 
   case XS_NUMBER_KIND: {
     // ISSUE: assume IEEE double format?
-    debug_push("> =%f", slot->value.number);
+    fprintf(stderr, "> =%f\n", slot->value.number);
     offset = append(the, offset, &(slot->value.number), sizeof(slot->value.number));
-    debug_pop();
   } break;
 
     // ISSUE: exposes distinction between ROM string and heap string
   case XS_STRING_KIND:
   case XS_STRING_X_KIND: {
     txU4 len = strlen(slot->value.string);
-    debug_push("> ='%.16s...' len:%d", slot->value.string, len);
+    fprintf(stderr, "==== ='%.16s...' len:%d\n", slot->value.string, len);
     offset = append(the, offset, &len, sizeof(len));
     offset = append(the, offset, slot->value.string, len);
-    debug_pop();
   } break;
 
   case XS_SYMBOL_KIND: {
-    debug_push("> sym:%d", slot->value.symbol);
+    fprintf(stderr, "==== sym:%d\n", slot->value.symbol);
     offset = append(the, offset, &(slot->value.symbol), sizeof(slot->value.symbol));
-    debug_pop();
   } break;
     /*@@@@
 	case XS_BIGINT_KIND:
@@ -299,18 +286,21 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
 {
   switch(slot->kind) {
   case XS_REFERENCE_KIND: {
-    debug_push(">reference");
+    debug_push(">ref");
     offset = dumpSlotOpt(the, offset, slot->value.reference, seen);
     debug_pop();
   } break;
   case XS_CLOSURE_KIND: {
-    offset = dumpSlotOpt(the, offset, slot->value.closure, seen);
+    debug_push(">closure");
+    offset = dumpSlotOpt(the, offset, slot->value.closure, seen);  // ISSUE: SlotList?
+    debug_pop();
   } break;
   case XS_INSTANCE_KIND: {
     // ISSUE: fprintf(file, ".value = { .instance = { NULL, ");
     debug_push(">prototype");
     offset = dumpSlotOpt(the, offset, slot->value.instance.prototype, seen);
     debug_pop();
+    offset = dumpProperties(the, offset, slot, seen);
   } break;
   case XS_ARRAY_KIND: {
     txSlot *item = slot->value.array.address;
@@ -342,15 +332,23 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
           {
             txChunk* chunk = (txChunk*)(slot->value.code.address - sizeof(txChunk));
             int size = chunk->size - sizeof(txChunk);
+            fprintf(stderr, "==== code size: %d (%d)\n", size, sizeof(size));
             offset = append(the, offset, &size, sizeof(size));
             offset = append(the, offset, slot->value.code.address, chunk->size - sizeof(txChunk));
           }
+          txSlot* closures = slot->value.code.closures;
+          if (closures->kind == XS_REFERENCE_KIND) { // a la fxRunEval
+            closures = closures->value.reference;
+          }
+          fprintf(stderr, "==== closures: %p\n", slot->value.code.closures);
+          debug_push(">closures");
           offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
+          debug_pop();
 	} break;
 	case XS_CODE_X_KIND: {
           fprintf(stderr, "TODO! XS_CODE_X_KIND: %p\n", slot->value.code.address);
           // offset = append(the, offset, &slot->value.code.address, sizeof(slot->value.code.address));
-          // offset = dumpSlotOpt(the, offset, slot->value.code.closures, seen);
+          // offset = dumpSlotList(the, offset, slot->value.code.closures, seen);
 	} break;
           /*
 	case XS_DATE_KIND: {
@@ -481,7 +479,7 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
     */
   } break;
 	case XS_EXPORT_KIND: {
-          offset = dumpSlotOpt(the, offset, slot->value.export.closure, seen);
+          offset = dumpSlotOpt(the, offset, slot->value.export.closure, seen);  // ISSUE: SlotList?
           offset = dumpSlotOpt(the, offset, slot->value.export.module, seen);
 	} break;
           /*
@@ -536,11 +534,77 @@ static xsIntegerValue dumpSlotOpt(xsMachine* the, xsIntegerValue offset, txSlot*
   if (!slot) {
     // distinct from all XS slot kinds in xsAll.h
     txKind null_slot_kind = XS_UNINITIALIZED_KIND - 1;
-    fprintf(stderr, "= dumpSlot %p\n", slot);
+    fprintf(stderr, "= None %p\n", slot);
     offset = append(the, offset, &null_slot_kind, sizeof(txKind));
   } else {
     offset = dumpSlot(the, offset, slot, seen);
   }
+  return offset;
+}
+
+static xsIntegerValue dumpSlotList(xsMachine* the, xsIntegerValue offset, txSlot* slot, xsIntegerValue* seen)
+{
+  while (slot) {
+    debug_push(">next");
+    offset = dumpSlot(the, offset, slot, seen);
+    debug_pop();
+    slot = slot->next;
+  }
+
+  // distinct from all XS slot kinds in xsAll.h
+  txKind nil_slot_kind = XS_UNINITIALIZED_KIND - 1;
+  fprintf(stderr, "= nil %p\n", slot);
+  offset = append(the, offset, &nil_slot_kind, sizeof(txKind));
+
+  return offset;
+}
+
+static xsIntegerValue dumpProperties(xsMachine* the, xsIntegerValue offset, txSlot* instance, xsIntegerValue* seen)
+{
+  debug_push(">properties");
+  txSlot* property;
+  if (instance->ID >= 0) {
+    txSlot* alias = the->aliasArray[instance->ID];
+    if (alias) {
+      fprintf(stderr, "@@alias: %d", instance->ID);
+      instance = alias;
+    }
+  }
+  property = instance->next;
+  while (property && (property->flag & XS_INTERNAL_FLAG)) {
+    debug_push(">internal");
+    offset = dumpSlot(the, offset, property, seen);
+    debug_pop();
+    property = property->next;
+  }
+  if (property && (property->kind == XS_ARRAY_KIND)) {
+    txSlot *item = property->value.array.address;
+    txInteger size = (txInteger)fxGetIndexSize(the, property);
+    fprintf(stderr, "@@array properties iffy? size:%d\n", size);
+    while (size) {
+      debug_push(">@%d item[%d]", offset, size);
+      offset = dumpItem(the, offset, item, seen);
+      debug_pop();
+      item++;
+      size--;
+    }
+  }
+  // a la fxQueueIDKeys
+  while (property) {
+    if (fxIsKeyName(the, property->ID)) {
+      debug_push(">next");
+      offset = dumpSlot(the, offset, property, seen);
+      debug_pop();
+    }
+    property = property->next;
+  }
+
+  // distinct from all XS slot kinds in xsAll.h
+  txKind nil_slot_kind = XS_UNINITIALIZED_KIND - 1;
+  fprintf(stderr, "= nil %p\n", property);
+  offset = append(the, offset, &nil_slot_kind, sizeof(txKind));
+
+  debug_pop();
   return offset;
 }
 

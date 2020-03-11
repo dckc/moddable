@@ -89,10 +89,10 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
             return { flag, id, idname };
         }
 
-        function slot(skip_next = false) {
+        function slot() {
             const kind = i8('kind');
-            trace(`slot kind: ${kind} skip_next:${skip_next}\n`);
-            if (kind == -2) {
+            trace(`slot kind: ${kind}\n`);
+            if (kind < -1) {
                 return null; // NULL
             }
             let value;
@@ -122,8 +122,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                     // TODO: Symbol, BigInt, ...
                     throw new RangeError(kind);
                 }
-                const next = skip_next ? null : slot();
-                return { kind, flag, id, idname, value, next };
+                return { kind, flag, id, idname, value };
             }
 
             const delta = i32('delta'); // txIntegerValue is 32bits
@@ -148,19 +147,30 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 const reference = slot();
                 value = { reference };
                 break;
+            case 11: // XS_CLOSURE_KIND
+                const closure = slot();
+                value = { closure };
+                break;
             case 13: // XS_INSTANCE_KIND
                 const prototype = slot();
-                value = { garbage: null, prototype };
+                const properties = slotList();
+                value = { garbage: null, prototype, properties };
                 break;
             case 16: // XS_ARRAY_KIND
                 let size = u32('array size');
                 value = [];
                 while (size > 0) {
                     trace(`array items to do: ${size}\n`);
-                    value.push(slot(true));
+                    value.push(slot());
                     size -= 1;
                 }
-                skip_next = true;
+                break;
+            case 19: // XS_CODE_KIND
+                const codeSize = u32('code size');
+                const code = tohex(data.slice(0, codeSize));
+                go(codeSize, 'code');
+                const closures = slot();
+                value = { code, closures };
                 break;
             case 20: // XS_CODE_X_KIND
                 value = ['TODO: XS_CODE_X_KIND', self];
@@ -174,7 +184,7 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 value = { getter, setter };
                 break;
             case 41: // XS_HOME_KIND
-                value = ['TODO: XS_HOME_KIND', self]
+                value = ['TODO: XS_HOME_KIND', self];
                 // const object = slot();
                 // const module = slot();
                 // value = { object, module };
@@ -187,10 +197,22 @@ export class Snapshot @ "Snapshot_prototype_destructor" {
                 // TODO: lots
                 throw new RangeError(kind);
             }
-            const next = skip_next ? null : slot();
             // trace(`compound: ${JSON.stringify({ kind, self, flag, id, idname, value, next }, null, 2)}\n`);
-            return { kind, self, flag, id, idname, value, next };
+            return { kind, self, flag, id, idname, value };
         }
+
+        function slotList() {
+            const items = [];
+            while (1) {
+                const next = slot();
+                if (next === null) {
+                    break;
+                }
+                items.push(next);
+            }
+            return items;
+        }
+
         return slot();
     }
 }

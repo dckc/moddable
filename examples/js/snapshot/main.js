@@ -15,13 +15,8 @@ function traceError(thunk) {
 
 const cases = [
     {
-        input: function f1() { return 'whee!'; },
-    },
-    {
-        input: () => 1,
-    },
-    {
         input: undefined,
+        note: 'undefined',
         parts: [
             '00', // kind
             '00', // flag
@@ -44,6 +39,9 @@ const cases = [
     },
     {
         input: 1.5,
+    },
+    {
+        input: 2.5,
     },
     {
         input: 'Hello World',
@@ -73,22 +71,42 @@ const cases = [
     },
     {
         input: { x: 1 },
-    }
+    },
+    {
+        // we use eval() to avoid functions from ROM
+        input: (1, eval)(`(function f1(x, y, z) { return 0; })`),
+        note: 'function f() { ... }',
+        parts: null,
+    },
+    {
+        input: (1, eval)(`() => 1`),
+        note: 'arrow function',
+        parts: null,
+    },
+    {
+        input: eval(`(function f1(x, y, z) { return 0; })`),
+        note: 'direct eval',
+        parts: null,
+    },
 ];
 
 export default function main() {
-    const exits = [Object.prototype, Array.prototype, String.prototype, Function.prototype, globalThis];
+    const exits = [Object.prototype, Array.prototype, String.prototype, Function.prototype,
+                   Snapshot,
+                   traceError,
+                   globalThis];
     const cycle = [1];
     cycle.push(cycle);
     cases.push({ input: cycle });
-    for (const { input: root, parts } of cases) {
+    for (const aCase of cases) {
+        const { input: root, parts } = aCase;
         const s1 = new Snapshot();
-        trace(`calling Snapshot.dump(type ${typeof root}) ${cases.length}...\n`);
+        trace(`calling Snapshot.dump(type ${typeof root}) case keys: ${Object.keys(aCase)}...\n`);
         const rawbuf = s1.dump(root, exits);
 
         const actual = s1.tohex(rawbuf);
         trace(`snapshot: ${rawbuf.byteLength} 0x${actual}\n`);
-        if (typeof parts != 'undefined') {
+        if (typeof parts != 'undefined' && parts !== null) {
             const expected = '00'.repeat(exits.length) + parts.join('');
             if (actual !== expected) {
                 trace(`FAIL: expected [${expected}].\n`);

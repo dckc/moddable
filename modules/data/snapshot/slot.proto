@@ -3,8 +3,7 @@ syntax = "proto3";
 message Slot {
   oneof kind {
     Ibid ibid = 1;
-    Array array = 2;
-    Fresh fresh = 3;
+    Value fresh = 2;
   }
 }
 
@@ -15,34 +14,16 @@ message Ibid {
   }
 }
 
-message Array {
-  uint32 self = 1;
-  Fresh.Value.FlagId flag_id = 2;
-  uint32 size = 3;
-  repeated Item items = 4;
-}
-
-message Item {
-  oneof kind {
-    Ibid ibid = 1;
-    Array array = 2;
-    Fresh.Value fresh = 3;
+message Value {
+  message FlagId {
+    uint32 flag = 4;  // one byte
+    int32 ID = 5;
+    bytes IDname = 6; // optional?
   }
-}
-
-message Fresh {
-  message Value {
-    message FlagId {
-      uint32 flag = 4;  // one byte
-      int32 ID = 5;
-      bytes IDname = 6; // optional?
-    }
-    oneof kind2 {
-      Scalar scalar = 7;
-      Complex complex = 8;
-    }
+  oneof kind2 {
+    Scalar scalar = 7;
+    Complex complex = 8;
   }
-  SlotOpt next = 9;
 }
 
 message Scalar {
@@ -75,7 +56,7 @@ message Complex {
     Instance instance = 13;
     // arguments_sloppy
     // arguments_strict
-    // Array array = 16;
+    Array array = 16;
     // ...TODO?
     Code code = 20;
     // ...
@@ -88,8 +69,13 @@ message Complex {
   }
 }
 
+message Array {
+  uint32 size = 3;
+  repeated Slot items = 4;
+}
+
 message Reference {
-  SlotOpt instance = 1;
+  SlotList instance = 1;
 }
 
 message SlotOpt {
@@ -99,17 +85,27 @@ message SlotOpt {
   }
 }
 
+message SlotList {
+  oneof tag {
+    Nil none = 1;
+    SlotList head = 2;
+  }
+}
+
 message None {
+}
+
+message Nil {
 }
 
 message Instance {
   // SlotOpt garbage = 1;
-  SlotOpt prototype = 2;
+  ItemOpt prototype = 2;
 }
 
 message Code {
-  uint64 address = 1;
-  SlotOpt closures = 2;
+  bytes code = 1;
+  SlotOpt closures = 2;  // ISSUE: SlotList?
 }
 
 message Accessor {
