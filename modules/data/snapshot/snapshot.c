@@ -240,8 +240,7 @@ static xsIntegerValue dumpScalar(xsMachine* the, xsIntegerValue offset, txSlot* 
 	} break;
     */
   default:
-    fprintf(stderr, "== slot kind not implemented: %d!\n", slot->kind);
-    assert(0); //
+    mxTypeError("slot kind not implemented: %d", slot->kind);
   }
 
   return offset;
@@ -521,8 +520,7 @@ static xsIntegerValue dumpComplex(xsMachine* the, xsIntegerValue offset, txSlot*
      */
 
   default:
-    fprintf(stderr, "== slot kind not implemented: %d!\n", slot->kind);
-    assert(0); //
+    mxTypeError("slot kind not implemented: %d", slot->kind);
   }
 
   return offset;
