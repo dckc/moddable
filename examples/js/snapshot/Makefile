@@ -1,6 +1,6 @@
 
 MODULES=../../../modules
-SRCS=main.js vat1.js $(MODULES)/data/snapshot/snapshot.js $(MODULES)/data/snapshot/snapshot.c
+SRCS=main.js snapshot_restore.js vat1.js $(MODULES)/data/snapshot/snapshot.js $(MODULES)/data/snapshot/snapshot.c
 BIN=./build/bin/lin/debug/snapshot
 
 $(BIN): ./build $(SRCS)

@@ -3,18 +3,18 @@
         "$(MODDABLE)/examples/manifest_base.json"
     ],
     "modules": {
-	"*": [
-	    "./main",
-	    "./vat1",
-            "$(MODULES)/data/snapshot/*",
-	],
+        "*": [
+            "./main",
+            "./snapshot_restore",
+            "./vat1",
+            "$(MODULES)/data/snapshot/*"
+        ]
     },
     "creation": {
         "keys": {
             "available": 4096
         },
-        "stack": 8192,
+        "stack": 8192
     },
-    "preload": [
-    ],
+    "preload": []
 }

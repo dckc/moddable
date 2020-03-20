@@ -1,0 +1,12 @@
+[ignore]
+
+[include]
+../../../modules/data/snapshot/snapshot.js
+
+[libs]
+
+[lints]
+
+[options]
+
+[strict]
