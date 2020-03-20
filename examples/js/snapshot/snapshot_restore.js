@@ -61,12 +61,12 @@ interface SlotCallback extends SlotComplex {
 
 type Exit = {|
     exit: number;
-    kind: 101;
+    kind: 0x8E; // (E)xit
 |}
 type Ibid = Exit | {|
     self: number;
     delta: number;
-    kind: 102;
+    kind: 0x8b; // I(b)id
 |}
 
 export type Slot = (
@@ -91,6 +91,88 @@ export class Snapshot extends SnapshotFFI {
     }
     tohex(rawbuf /*: ArrayBuffer */, limit /*:: ?: number*/) {
         return tohex(new Uint8Array(rawbuf), limit);
+    }
+
+    rebuild(slot /*: Slot */, exits /*: mixed[] */) /*: mixed */ {
+        const seen = new Map();
+        function recur(slot /*: SlotOpt */) {
+            if (slot === null) {
+                return null;
+            }
+            if (slot.kind < 10) {
+                let scalar;
+                switch (slot.kind) {
+                    case 0: // XS_UNDEFINED_KIND
+                    scalar = undefined;
+                    break;
+                    case 1: // XS_NULL_KIND
+                    scalar = null;
+                    break;
+                    case 2: // XS_BOOLEAN_KIND
+                    scalar = slot.value;
+                    break;
+                    case 3: // XS_INTEGER_KIND
+                    scalar = slot.value;
+                    break;
+                    case 4: // XS_NUMBER_KIND
+                    scalar = slot.value;
+                    break;
+                    case 5: // XS_STRING_KIND
+                    scalar = slot.value;
+                    break;
+                    default:
+                        throw new RangeError(`not implemented: ${JSON.stringify(slot)}`)
+                }
+                return scalar;
+            }
+            switch (slot.kind) {
+                case 0x8E: // exit
+                    return exits[slot.exit];
+                case 0x8b: // Ibid
+                    trace(`Ibid: ${slot.self}\n`);
+                    return seen.get(slot.self);
+                default:
+                    // pass thru...
+            }
+            let fresh;
+            switch (slot.kind) {
+                case 10: // REFERENCE
+                    fresh = recur(slot.value.reference);
+                    seen.set(slot.self, fresh);
+                    break;
+                case 13: // INSTANCE
+                    const prototype = recur(slot.value.prototype);
+                    if (prototype === Function.prototype) {
+                        trace(`TODO: Function.prototype ${JSON.stringify(slot)}\n`);
+                        throw new RangeError('Function.prototype rebuild');
+                    }
+                    if (prototype === Array.prototype) {
+                        // ISSUE: properties of the array itself?
+                        fresh = [];
+                        trace(`Fresh: ${slot.self} => ${typeof fresh}\n`);
+                        seen.set(slot.self, fresh);
+                        slot.value.properties.forEach(item => fresh.push(recur(item)))
+                    } else if (typeof prototype !== 'object') {
+                        throw TypeError(`bad prototype: ${typeof prototype}`);
+                    } else {
+                        fresh = Object.create(prototype);
+                        trace(`Fresh: ${slot.self} => ${typeof fresh}\n`);
+                        seen.set(slot.self, fresh);
+                        for (const p of slot.value.properties) {
+                            const key = p.idname;  // ouch! missing from Ibid
+                            if (typeof key === 'undefined') {
+                                throw new RangeError(`property symbol not implemented: ${p.id}`);
+                            }
+                            fresh[key] = recur(p);
+                        }
+                    }
+                    break;
+                default:
+                    throw new RangeError(`not implemented: ${JSON.stringify(slot)}`)
+            }
+            return fresh;
+        }
+        return recur(slot);
     }
 
     restore(rawbuf /*: ArrayBuffer */, exitQty /*: number */) /*: Slot */ {
@@ -206,11 +288,11 @@ export class Snapshot extends SnapshotFFI {
             if (delta >= 0) {
                 let ibid /*: Ibid */;
                 if (delta <= exitQty) {
-                    ibid = { exit: delta, kind: 101 };
+                    ibid = { exit: delta, kind: 0x8E };
                     trace(`exit: ${delta}\n`);
                 } else {
                     self = u64(delta + 4);
-                    ibid = { self, delta, kind: 102 };
+                    ibid = { self, delta, kind: 0x8b };
                     trace(`seen slot: ${delta}, ${self.toString(16).toLowerCase()}\n`);
                 }
                 return ibid;

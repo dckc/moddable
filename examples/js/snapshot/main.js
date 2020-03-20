@@ -30,7 +30,7 @@ type TestCase = {
 const cases /*: TestCase[] */ = [
     {
         input: undefined,
-        note: 'undefined',
+        note: 'undefined scalar',
         parts: [
             '00', // kind
             '00', // flag
@@ -41,28 +41,35 @@ const cases /*: TestCase[] */ = [
     },
     {
         input: null,
+        note: 'null scalar',
         struct: { kind: 1, flag: 0, id: 0, value: null },
     },
     {
         input: true,
+        note: 'boolean scalar',
         struct: { kind: 2, flag: 0, id: 0, value: true },
     },
     {
         input: 1,
+        note: 'int scalar',
         struct: { kind: 3, flag: 0, id: 0, value: 1 },
     },
     {
         input: 1.5,
+        note: 'float scalar',
     },
     {
         input: 2.5,
+        note: 'another float scalar',
     },
     {
         input: 'Hello World',
+        note: 'string scalar',
         struct: { kind: 5, flag: 0, id: 0, value: "Hello World" },
     },
     {
         input: 'Hello World'.repeat(20),
+        note: 'longer string scalar',
         parts: [
             '05',  // kind
             '00', '0000', '00000000', // flag, id, id name length
@@ -82,10 +89,15 @@ const cases /*: TestCase[] */ = [
     },
     {
         input: [1, 2],
+        note: 'array of 2 ints',
     },
     {
+        note: 'object { x: 1 }',
         input: { x: 1 },
-    },
+    }
+];
+
+const fnCases /*: TestCase[] */ = [
     {
         // we use eval() to avoid functions from ROM
         input: (1, eval)(`(function f1(x, y, z) { return 0; })`),
@@ -101,18 +113,40 @@ const cases /*: TestCase[] */ = [
     },
 ];
 
+function assert(condition) {
+    if (!condition) {
+        throw new Error('assert!');
+    }
+}
+
+export function stringifyCycles(v /*: mixed*/) {
+  const cache = new Map();
+  return JSON.stringify(v, function (key, value) {
+    if (typeof value === 'object' && value !== null) {
+      if (cache.get(value)) {
+        // Circular reference found, discard key
+        return'*CYCLE*';
+      }
+      // Store value in our collection
+      cache.set(value, true);
+    }
+    return value;
+  });
+}
+
+
 export default function main() {
     const exits = [Object.prototype, Array.prototype, String.prototype, Function.prototype,
                    Snapshot,
                    traceError,
                    globalThis];
-    const cycle = [1];
+    const cycle = [1, 'b', 'c'];
     cycle.push(cycle);
-    cases.push({ input: cycle });
-    for (const aCase of cases) {
-        const { input: root, parts } = aCase;
+    cases.push({ input: cycle, note: 'cycle' });
+    for (const aCase of cases.concat(...fnCases)) {
+        const { input: root, parts, note } = aCase;
         const s1 = new Snapshot();
-        trace(`calling Snapshot.dump(type ${typeof root}) case keys: ${Object.keys(aCase).toString()}...\n`);
+        trace(`\n\n\n======= ${note}\n--calling Snapshot.dump(type ${typeof root})\ncase keys: ${Object.keys(aCase).toString()}...\n`);
         const rawbuf = s1.dump(root, exits);
 
         const actual = s1.tohex(rawbuf);
@@ -126,5 +160,8 @@ export default function main() {
         const info = traceError(() => s1.restore(rawbuf, exits.length));
         // $FlowFixMe -- thinks undefined shouldn't be stringified
         trace(`snapshot value: ${JSON.stringify(info, null, 2)}\n`);
+        const built = s1.rebuild(info, exits);
+        assert(typeof built === typeof root);
+        trace(`rebuild ok? ${stringifyCycles(built)} =?= ${stringifyCycles(root)}\n`);
     }
 }
