@@ -143,8 +143,23 @@ export class Snapshot extends SnapshotFFI {
                 case 13: // INSTANCE
                     const prototype = recur(slot.value.prototype);
                     if (prototype === Function.prototype) {
-                        trace(`TODO: Function.prototype ${JSON.stringify(slot)}\n`);
-                        throw new RangeError('Function.prototype rebuild');
+                        const code = slot.value.properties[0]; // cf. mxFunctionInstanceCode in xsAll.h
+                        let home;
+                        if (code && code.kind === 19) { // XS_CODE_KIND
+                            home = slot.value.properties[1]; // mxFunctionInstanceHome
+                            if (home && home.kind === 41) {
+                                // ISSUE: mxProfile inserts another slot here this.
+                                const length = slot.value.properties[2]; // mxFunctionInstanceLength
+                                slot.value.properties = slot.value.properties.slice(2); // ISSUE: loop until not INTERNAL?
+                                fresh = this.restoreFunction(code.code);
+                                if (code.closures !== null) {
+                                    throw new RangeError('TODO: function closures');
+                                }
+                                break;
+                            }
+                        }
+                        trace(`TODO: function ${JSON.stringify({"value.code": code, "value.home": home})}\n`);
+                        throw new RangeError('function code.kind / home.kind');
                     }
                     if (prototype === Array.prototype) {
                         // ISSUE: properties of the array itself?
