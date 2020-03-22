@@ -27,6 +27,27 @@ void Snapshot_prototype_destructor(xsMachine* the)
 }
 #pragma GCC diagnostic warning "-Wunused-parameter"
 
+/**
+ * restoreFunction(code)
+ * @param code: ArrayBuffer with xs bytecode
+ * @return a new function with bytecode from code
+ *
+ * TODO: support closures, home (module)
+ **/
+void Snapshot_prototype_restoreFunction(xsMachine *the)
+{
+  if (xsToInteger(xsArgc) != 1) {
+    mxTypeError("expected 1 arguments");
+  }
+  xsIntegerValue size = xsGetArrayBufferLength(xsArg(0));
+  xsVars(1);
+  mxPush(mxFunctionPrototype);
+  txSlot* instance = fxNewFunctionInstance(the, XS_NO_ID);
+  instance->next->kind = XS_CODE_X_KIND;
+  instance->next->value.code.address = (txByte*)fxNewChunk(the, (txSize)size);
+  xsGetArrayBufferData(xsArg(0), 0, instance->next->value.code.address, size);
+  mxPullSlot(mxResult);
+}
 
 /**
 
