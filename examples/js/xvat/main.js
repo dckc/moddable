@@ -1,8 +1,15 @@
 import VM from "xmachine";
 
-function main() {
+export default function main() {
     const vatMachine = new VM();
-    vatMachine.call("main", "[1,2,3]");
+    (1, eval)("1");
+    const result = vatMachine.evaluate("[1,2,3]");
+    trace(`result: ${result}\n`);
+    try {
+        const result2 = vatMachine.evaluate("(function infiniteRecursion() { infiniteRecursion(); })()");
+        //const result2 = vatMachine.evaluate("throw new TypeError()");
+        trace(`result 2: ${result2}\n`);    
+    } catch (oops) {
+        trace(`survived: ${oops.message}\n`)
+    }
 }
-
-main();

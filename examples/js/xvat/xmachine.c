@@ -5,7 +5,6 @@
 
 #include "xs.h"
 
-
 typedef struct
 {
 	xsMachine *machine;
@@ -33,37 +32,55 @@ void VM_prototype_constructor(xsMachine *the)
 	xsSetHostChunk(xsThis, &r, sizeof(r));
 }
 
-void VM_prototype_call(xsMachine *the)
+void VM_prototype_evaluate(xsMachine *the)
 {
 	xsVM vm = xsGetHostChunk(xsThis);
-	xsStringValue module = xsToString(xsArg(0));
-	xsStringValue arg = xsToString(xsArg(1));
+	xsStringValue expr = xsToString(xsArg(0));
+	fprintf(stderr, "the: %p vm %p eval: %s\n", the, &xsThis, expr);
 	xsStringValue result;
+	xsStringValue message = NULL;
 	xsVars(1);
+	xsCollectGarbage(); // ISSUE: good idea to collect garbage before and after x-machine calls?
 	xsBeginHost(vm->machine);
 	{
 		xsVars(3);
 		{
 			xsTry
 			{
-				xsVar(0) = xsString(arg);
-				// TODO: non-default export? xsStringValue export = xsToString(xsArg(1));
-				xsVar(1) = xsAwaitImport(module, XS_IMPORT_DEFAULT);
-				xsVar(2) = xsCallFunction1(xsVar(1), xsUndefined, xsVar(0));
-				result = xsToString(xsVar(2));
+				xsCollectGarbage();
+				xsVar(0) = xsString(expr);
+				xsVar(1) = xsCall1(xsGlobal, xsID("eval"), xsVar(0));
+				result = xsToString(xsVar(1));
 			}
 			xsCatch
 			{
-				fprintf(stderr, "@@@AAAARG!");
+				message = xsToString(xsException);
+				fprintf(stderr, "### %s\n", message);
 			}
 		}
 	}
 	xsEndHost(vm->machine);
-	xsVar(0) = xsString(result);
+	xsCollectGarbage();
+	if (message)
+	{
+		xsUnknownError("%s", message);
+	}
+	else
+	{
+		xsResult = xsString(result);
+	}
 }
 
-void VM_prototype_destructor(xsMachine *the)
+void VM_prototype_destructor(void *data)
 {
-	xsVM vm = xsGetHostData(xsThis);
-	xsDeleteMachine(vm->machine);
+	fprintf(stderr, "del VM data=%p\n", data);
+	if (!data) {
+		return;
+	}
+	xsVM vm = data;
+	if (vm->machine)
+	{
+		xsDeleteMachine(vm->machine);
+		vm->machine = NULL;
+	}
 }

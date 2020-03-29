@@ -1,7 +1,7 @@
 class VM @ "VM_prototype_destructor" {
 	constructor(...params) @ "VM_prototype_constructor";
 
-	call() @ "VM_prototype_call";
+	evaluate() @ "VM_prototype_evaluate";
 };
 
 export default VM;
