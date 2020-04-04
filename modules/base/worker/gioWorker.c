@@ -1,5 +1,5 @@
 #include "mc.xs.h"
-#include "screen.h"
+#include "screen_gio.h"
 
 typedef struct sxWorker txWorker;
 typedef struct sxWorkerMessageJob txWorkerMessageJob;
@@ -9,13 +9,14 @@ struct sxWorker {
 	xsSlot reference;
 	xsMachine* ownerMachine;
 	xsSlot ownerReference;
-	txScreen* screen;
 	txWorker* nextWorker;
 	xsBooleanValue running;
 	txCondition runningCondition;
 	txMutex runningMutex;
 #if mxLinux
 	GMainLoop* main_loop;
+		#else
+                        #error
 #endif
 	char name[1];
 };
@@ -55,28 +56,8 @@ static gpointer fxWorkerLoop(gpointer it)
 	g_main_context_unref(main_context);
 	return NULL;
 }
-#elif mxWindows
-static unsigned int __stdcall fxWorkerLoop(void* it)
-{
-	txWorker* worker = it;
-	MSG msg;
-	fxWorkerInitialize(worker);
-    while (GetMessage(&msg, NULL, 0, 0) > 0) {
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
- 	fxWorkerTerminate(worker);
-   return 0;
-}
-#else
-static void* fxWorkerLoop(void* it)
-{
-	txWorker* worker = it;
-	fxWorkerInitialize(worker);
-	CFRunLoopRun();
-	fxWorkerTerminate(worker);
-    return NULL;
-}
+		#else
+                        #error
 #endif
 
 void fxWorkerInitialize(txWorker* worker)
@@ -128,8 +109,6 @@ void fxWorkerMessage(void* machine, void* it)
 	}
 	xsEndHost(machine);
 #if mxInstrument
-	if (((txScreen*)(((xsMachine*)machine)->host))->mainThread != mxCurrentThread())
-		fxSampleInstrumentation(machine, 0, NULL);
 #endif
 	c_free(job->argument);
 }
@@ -165,20 +144,10 @@ void xs_worker_destructor(void *data)
 {
 	if (data) {
 		txWorker* worker = data;
-		if (worker->screen) {
-			c_memset(&worker->ownerReference, 0, sizeof(xsSlot));
-			worker->ownerMachine = NULL;
-    		mxLockMutex(&worker->screen->workersMutex);
-			worker->running = 0;
-     		mxUnlockMutex(&worker->screen->workersMutex);
-		}
-		else {
 		#if mxLinux
 			g_main_loop_quit(worker->main_loop);
-		#elif mxWindows
-			PostMessage(worker->machine->window, WM_QUIT, 0, 0);
 		#else
-			CFRunLoopStop(worker->machine->workerLoop);
+                        #error
 		#endif
 			mxLockMutex(&worker->runningMutex);
 			while (worker->running) mxWaitCondition(&worker->runningCondition, &worker->runningMutex);
@@ -186,7 +155,6 @@ void xs_worker_destructor(void *data)
 			mxDeleteMutex(&worker->runningMutex);
 			mxDeleteCondition(&worker->runningCondition);
 			c_free(worker);
-		}
 	}
 }
 
@@ -208,44 +176,13 @@ void xs_worker(xsMachine *the)
 		mxLockMutex(&worker->runningMutex);
 		#if mxLinux
 			g_thread_new(worker->name, fxWorkerLoop, worker);
-		#elif mxWindows
-			(HANDLE)_beginthreadex(NULL, 0, fxWorkerLoop, worker, 0, NULL);
 		#else
-			pthread_attr_t	attr;
-			pthread_t pthread;
-			pthread_attr_init(&attr);
-			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-			pthread_create(&pthread, &attr, &fxWorkerLoop, worker);
-			pthread_attr_destroy(&attr);
+                        #error
 		#endif
 		while (!worker->running) mxWaitCondition(&worker->runningCondition, &worker->runningMutex);
 		mxUnlockMutex(&worker->runningMutex);
 	}
     else {
-    	txScreen* screen = the->host;
-    	txWorker* worker;
-    	mxLockMutex(&screen->workersMutex);
-    	{
-			worker = screen->firstWorker;
-			while (worker) {
-				if (!c_strcmp(worker->name, name)) {
-					if (worker->running)
-						worker = NULL;
-					else
-						worker->running = 1;
-					break;
-				}
-				worker = worker->nextWorker;
-			}
-    	}
-     	mxUnlockMutex(&screen->workersMutex);
-   		if (worker) {
-			worker->ownerMachine = the;
-			worker->ownerReference = xsThis;
-			xsRemember(worker->ownerReference);
- 			xsSetHostData(xsThis, worker);
-   		}
-    	else
 			xsUnknownError("worker not found");
     }
 }
@@ -256,14 +193,8 @@ void xs_worker_postfrominstantiator(xsMachine *the)
 	txWorkerMessageJob* job = c_calloc(sizeof(txWorkerMessageJob), 1);
 	if (job == NULL)
 		xsUnknownError("not enough memory");
-	if (worker->screen) {
-		job->callback = fxWorkerMessageAlien;
-		job->argument = xsMarshallAlien(xsArg(0));
-	}
-	else {
 		job->callback = fxWorkerMessage;
 		job->argument = xsMarshall(xsArg(0));
-	}
 	job->reference = &(worker->reference);
 	fxQueueWorkerJob(worker->machine, job);
 }
@@ -291,67 +222,4 @@ void xs_worker_terminate(xsMachine *the)
 void xs_sharedworker(xsMachine *the)
 {
 	xsDebugger();
-}
-
-void PiuScreenWorkerCreateAux(xsMachine* the, txScreen* screen)
-{
-	char *name = xsToString(xsArg(0));
-	txWorker* worker = c_calloc(sizeof(txWorker) + c_strlen(name), 1);
-	if (worker == NULL)
-		xsUnknownError("not enough memory");
-	worker->machine = the;
-	worker->reference = xsThis;
-	xsRemember(worker->reference);
-	c_strcpy(worker->name, name);
-	xsSetHostData(xsThis, worker);
-	worker->screen = screen;
-    mxLockMutex(&screen->workersMutex);
-    {
-		worker->nextWorker = screen->firstWorker;
-		screen->firstWorker = worker;
-	}
-    mxUnlockMutex(&screen->workersMutex);
-}
-
-void PiuScreenWorkerDelete(void *data)
-{
-	if (data) {
-		//@@
-	}
-}
-
-void PiuScreenWorker_close(xsMachine* the)
-{
-	txWorker* worker = xsGetHostData(xsThis);
-	txScreen* screen = worker->screen;
-    mxLockMutex(&screen->workersMutex);
-    {
-    	if (worker->running) {
-    		xsDebugger(); // should never happen
-    	}
-    	else {
-			txWorker** address = (txWorker**)&(screen->firstWorker);
-			while ((*address != worker))
-				address = &((*address)->nextWorker);
-			*address = worker->nextWorker;
-		}
-	}
-    mxUnlockMutex(&screen->workersMutex);
-	xsSetHostData(xsThis, NULL);
-	xsForget(worker->reference);
-	c_free(worker);
-}
-
-void PiuScreenWorker_postMessage(xsMachine* the)
-{
-	txWorker* worker = xsGetHostData(xsThis);
-	if (worker->running) {
-		txWorkerMessageJob* job = c_calloc(sizeof(txWorkerMessageJob), 1);
-		if (job == NULL)
-			xsUnknownError("not enough memory");
-		job->argument = xsMarshallAlien(xsArg(0));
-		job->reference = &(worker->ownerReference);
-		job->callback = fxWorkerMessageAlien;
-		fxQueueWorkerJob(worker->ownerMachine, job);
-	}
 }

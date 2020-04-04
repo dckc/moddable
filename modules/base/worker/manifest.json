@@ -24,6 +24,11 @@
 				"*": "$(MODULES)/base/worker/pcWorker",
 			},
 		},
+		"x-cli-lin": {
+			"modules": {
+				"*": "$(MODULES)/base/worker/gioWorker",
+			},
+		},
 		"mac": {
 			"modules": {
 				"*": "$(MODULES)/base/worker/pcWorker",
