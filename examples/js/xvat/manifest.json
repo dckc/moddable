@@ -1,9 +1,14 @@
 {
-	"include": "$(MODDABLE)/examples/manifest_base.json",
+	"include": [
+		"$(MODDABLE)/examples/manifest_base.json",
+		"$(MODULES)/base/worker/manifest.json",
+	],
 	"modules": {
 		"*": [
 			"./main",
-			"./xmachine"
+			"./alice",
+			"./bob",
+			"./mallet"
 		]
 	}
 }

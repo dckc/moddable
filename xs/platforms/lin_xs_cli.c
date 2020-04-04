@@ -23,10 +23,19 @@
 extern void fxRunPromiseJobs(void* machine);
 extern txS1 fxPromiseIsPending(xsMachine* the, xsSlot* promise);
 extern txS1 fxPromiseIsRejected(xsMachine* the, xsSlot* promise);
+extern void xs_worker_terminate(xsMachine *the);
 
 void fxAbort(xsMachine* the)
 {
-	exit(1);
+  fprintf(stderr, "fxAbort(%p)\n", the);
+  if (the->workerContext) {
+    void* worker = the->context;
+    fprintf(stderr, "%p worker: %p\n", the, worker);
+    xs_worker_terminate(the);
+  } else {
+    fprintf(stderr, "exit(1)\n");
+    exit(1);
+  }
 }
 
 int main(int argc, char* argv[])  // here
