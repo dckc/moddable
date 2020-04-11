@@ -48,6 +48,8 @@ static gpointer fxWorkerLoop(gpointer it)
 	g_main_context_push_thread_default(main_context);
 	fxWorkerInitialize(worker);
 	worker->main_loop = g_main_loop_new(main_context, FALSE);
+        fprintf(stderr, "@@!!!fxWorkerLoop worker=%p main_loop=%p main_context=%p\n",
+                worker, worker->main_loop, main_context);
 	g_main_loop_run(worker->main_loop);
 	g_main_loop_unref(worker->main_loop);
 	worker->main_loop = NULL;
@@ -217,6 +219,23 @@ void xs_worker_terminate(xsMachine *the)
 	xsForget(worker->ownerReference);
 	xsSetHostData(xsThis, NULL);
 	xs_worker_destructor(worker);
+}
+
+void worker_abort(xsMachine *the, txWorker *worker)
+{
+	// NOTE: the = the worker machine, not the owner as in _terminate
+        GMainLoop* main_loop = worker->main_loop;
+        GMainContext* main_context = g_main_loop_get_context (main_loop);
+        fprintf(stderr, "@@!!!abort worker=%p main_loop=%p main_context=%p\n",
+                worker, main_loop, main_context);
+	fxWorkerTerminate(worker);
+        // TODO: notify owner
+	g_main_loop_unref(main_loop);
+	g_main_context_pop_thread_default(main_context);
+	g_main_context_unref(main_context);
+        fprintf(stderr, "about to kill thread...\n");
+        g_thread_exit(NULL);
+        fprintf(stderr, "already killed this thread; this should not print!\n");
 }
 
 void xs_sharedworker(xsMachine *the)

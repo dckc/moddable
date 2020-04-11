@@ -1,11 +1,17 @@
 /* global trace */
 
-let recur = 0;
+trace(`mallet self: ${self}\n`);
 
-function infiniteRecursion() { trace(`call stack depth: ${++recur}\n`); infiniteRecursion(); }
+self.onmessage = (msg) => {
+  let recur = 0;
 
-try {
+  function infiniteRecursion() { trace(`call stack depth: ${++recur}\n`); infiniteRecursion(); }
+
+  try {
     infiniteRecursion();
-} catch (oops) {
+  } catch (oops) {
+    trace(`mallet self: ${self}\n`);
     trace(`caught ${oops.message}! BWAHAHAH\n`);
-}
+  }
+};
+
