@@ -43,7 +43,7 @@ void Snapshot_prototype_restoreFunction(xsMachine *the)
   xsVars(1);
   mxPush(mxFunctionPrototype);
   txSlot* instance = fxNewFunctionInstance(the, XS_NO_ID);
-  instance->next->kind = XS_CODE_X_KIND;
+  instance->next->kind = XS_CODE_X_KIND; // X not for chunks.
   instance->next->value.code.address = (txByte*)fxNewChunk(the, (txSize)size);
   xsGetArrayBufferData(xsArg(0), 0, instance->next->value.code.address, size);
   mxPullSlot(mxResult);
