@@ -99,6 +99,22 @@ const cases /*: TestCase[] */ = [
 
 const fnCases /*: TestCase[] */ = [
     {
+        input: (1, eval)(`
+        (function makeCounter() {
+            let count = 1;
+            return harden({
+                incr() {  // <-- what does this thing's .closure slot store? [2]?
+                    return ++count;
+                },
+                decr() {  // <-- what does this thing's .closure slot store? [2] ?
+                    return ++count;
+                }
+            });
+        })
+        `),
+        note: 'record of closures with shared var',
+    },
+    {
         // we use eval() to avoid functions from ROM
         input: (1, eval)(`(function f1(x, y, z) { return 0; })`),
         note: 'function f() { ... }',
