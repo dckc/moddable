@@ -1,0 +1,1 @@
+../../../examples/js/snapshot/slot.pb-c.c
