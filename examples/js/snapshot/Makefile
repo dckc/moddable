@@ -12,6 +12,11 @@ run: $(BIN)
 ./build:
 	mkdir -p build
 
+protogen: slot.pb-c.h slot.pb-c.c
+
+slot.pb-c.h slot.pb-c.c: $(MODULES)/data/snapshot/slot.proto
+	protoc-c --c_out=. -I $(MODULES)/data/snapshot $<
+
 
 # protobuf-c cheat-sheet
 
@@ -19,7 +24,7 @@ apt-install:
 	echo Addendum to Getting Started for Protobuf serialization
 	sudo apt install protobuf-c-compiler libprotobuf-c-dev
 
-protogen: amessage.pb-c.h amessage.pb-c.c
+protogen-ex: amessage.pb-c.h amessage.pb-c.c
 
 amessage.pb-c.h amessage.pb-c.c: amessage.proto
 	protoc-c --c_out=. amessage.proto

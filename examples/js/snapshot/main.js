@@ -156,6 +156,16 @@ export default function main() {
                    Snapshot,
                    traceError,
                    globalThis];
+    const s0 = new Snapshot();
+    const slot = 123;
+    const actual = s0.encodeSlot(slot, exits);
+
+    trace(`typeof actual: ${typeof actual} ArrayBuffer? ${actual instanceof ArrayBuffer}\n`);
+    trace(`root: ${slot} encodedSlot: ${s0.tohex(actual)}\n`);
+
+
+    return;
+    // TODO...
     const cycle = [1, 'b', 'c'];
     cycle.push(cycle);
     cases.push({ input: cycle, note: 'cycle' });

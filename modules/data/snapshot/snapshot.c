@@ -2,6 +2,7 @@
 
 #include "xsAll.h"
 #include "xs.h"
+#include "slot.pb-c.h"
 
 static xsIntegerValue alreadySeen(xsMachine* the, txSlot* target, xsIntegerValue seen);
 static xsIntegerValue append(xsMachine* the, xsIntegerValue offset, void* src, xsIntegerValue qty);
@@ -15,6 +16,38 @@ static xsIntegerValue dumpSlotValue(xsMachine* the, xsIntegerValue offset, txSlo
 // ISSUE: debug print stuff should go away
 static void debug_push(char *format, ...);
 static void debug_pop();
+
+
+void Snapshot_prototype_encodeSlot(xsMachine* the)
+{
+  Slot msg = SLOT__INIT;
+  char buf[64];
+  xsIntegerValue len;
+
+  if (xsToInteger(xsArgc) != 2) {
+    mxTypeError("expected 2 arguments");
+  }
+  txSlot *slot = &xsArg(0);
+
+  msg.next = slot->next; // TODO: compute index
+  msg.id = slot->ID;
+  msg.flag = slot->flag; // TODO: extra flag bits from caller?
+  switch(slot->kind) {
+  case XS_INTEGER_KIND: {
+    xsIntegerValue value = xsToInteger(*slot);
+    msg.kind_case = SLOT__KIND_INTEGER;
+    msg.integer = value;
+  }
+    break;
+  default:
+    mxTypeError("slot kind not implemented: %d", slot->kind);
+  }
+  len = slot__get_packed_size(&msg);
+  fprintf(stderr, "@@encodeSlot size: %d\n", len);
+  assert(len < sizeof(buf));
+  slot__pack(&msg, buf);
+  xsResult = xsArrayBuffer(&buf, len);
+}
 
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"

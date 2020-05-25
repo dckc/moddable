@@ -1,10 +1,31 @@
 syntax = "proto3";
 
 message Slot {
+  Address next = 200;
+  int32 ID = 201;
+  // string IDname = 202;
+  uint32 flag = 203;  // one byte. use separate flag bits?
   oneof kind {
-    Ibid ibid = 1;
-    Value fresh = 2;
+    Uninitialized uninitialized = 99; // xs kind = -1?
+    Undefined undefined = 100;  // xs kind = 0
+    XsNull the_null = 1;
+    bool bool = 2;
+    int32 integer = 3;
+    double number = 4;
+    bytes string = 5;
+    // STRING_X_KIND = 6
+    int32 symbol = 7;
+    bytes bigint = 8;
+    // BIGINT_X_KIND = 9
   }
+}
+
+message Address {
+  // as in fxPrintAddress
+  // https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L808
+  //   if ((projection->heap < slot) && (slot < projection->limit)) {
+  //     fprintf(file, "(txSlot*)&gxHeap[%d]", (int)projection->indexes[slot - projection->heap]);
+  int64 index = 1;
 }
 
 message Ibid {
@@ -22,14 +43,14 @@ message Value {
   }
   oneof kind2 {
     Scalar scalar = 7;
-    Complex complex = 8;
+    XsComplex complex = 8;
   }
 }
 
 message Scalar {
   oneof kind {
     Undefined undefined = 100;  // xs kind = 0
-    Null null = 1;
+    XsNull the_null = 1;
     bool bool = 2;
     int32 integer = 3;
     double number = 4;
@@ -41,13 +62,16 @@ message Scalar {
   }
 }
 
+message Uninitialized {
+}
+
 message Undefined {
 }
 
-message Null {
+message XsNull {
 }
 
-message Complex {
+message XsComplex {
   uint32 self = 1;
   oneof kind {
     Reference reference = 10;
@@ -100,7 +124,7 @@ message Nil {
 
 message Instance {
   // SlotOpt garbage = 1;
-  ItemOpt prototype = 2;
+  // ItemOpt prototype = 2;
 }
 
 message Code {

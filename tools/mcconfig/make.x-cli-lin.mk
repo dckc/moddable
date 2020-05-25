@@ -108,7 +108,7 @@ endif
 C_INCLUDES += $(DIRECTORIES)
 C_INCLUDES += $(foreach dir,$(XS_DIRECTORIES) $(TMP_DIR),-I$(dir))
 
-XS_C_FLAGS = -fPIC -shared -c $(shell $(PKGCONFIG) --cflags gio-2.0)
+XS_C_FLAGS = -fPIC -shared -c $(shell $(PKGCONFIG) --cflags gio-2.0) $(shell $(PKGCONFIG) --cflags libprotobuf-c)
 ifeq ($(DEBUG),)
 	XS_C_FLAGS += -D_RELEASE=1 -O3
 else
@@ -117,7 +117,7 @@ else
 endif
 C_FLAGS = $(XS_C_FLAGS)
 
-LINK_LIBRARIES = -lm -lc $(shell $(PKGCONFIG) --libs gio-2.0)
+LINK_LIBRARIES = -lm -lc $(shell $(PKGCONFIG) --libs gio-2.0)  $(shell $(PKGCONFIG) --libs libprotobuf-c)
 
 # LINK_FLAGS = -arch i386
 LINK_FLAGS = -fPIC
@@ -135,6 +135,10 @@ all: $(LIB_DIR) $(BIN_DIR)/$(NAME)
 
 $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
+
+apt-install:
+	echo Addendum to Getting Started for Protobuf serialization
+	sudo apt-get install libgtk-3-dev libprotobuf-c-dev
 
 $(TMP_DIR)/lin_xs_cli.c: $(XS_DIR)/platforms/lin_xs_cli.c
 	cp $^ $@

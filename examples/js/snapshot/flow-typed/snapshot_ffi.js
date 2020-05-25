@@ -5,5 +5,6 @@ declare module 'snapshot' {
         constructor(): SnapshotFFI;
 
         dump(root: mixed, exits: mixed[]): ArrayBuffer;
+        encodeSlot(root: mixed, exits: mixed[]): ArrayBuffer;
     }
 }
