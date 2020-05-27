@@ -12,11 +12,16 @@ message Slot {
     bool bool = 2;
     int32 integer = 3;
     double number = 4;
-    bytes string = 5;
+    string string = 5;
     // STRING_X_KIND = 6
     int32 symbol = 7;
     bytes bigint = 8;
     // BIGINT_X_KIND = 9
+    Address reference = 10;
+    // 11
+    // 12
+    Address prototype = 13;  // XS_INSTANCE_KIND
+    Table global = 25;  // XS_INSTANCE_KIND
   }
 }
 
@@ -25,7 +30,17 @@ message Address {
   // https://github.com/Moddable-OpenSource/moddable/blob/public/xs/tools/xslSlot.c#L808
   //   if ((projection->heap < slot) && (slot < projection->limit)) {
   //     fprintf(file, "(txSlot*)&gxHeap[%d]", (int)projection->indexes[slot - projection->heap]);
-  int64 index = 1;
+  int32 heap = 1;
+  int64 offset = 2;
+}
+
+message Module {
+  Address realm = 1;
+  int32 id = 2;
+}
+
+message Table {
+  repeated Address address = 1;
 }
 
 message Ibid {

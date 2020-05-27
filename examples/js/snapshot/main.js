@@ -1,6 +1,8 @@
 /* global Compartment, trace, snapshot, globalThis */
 // @flow
 
+import Worker from "worker";
+
 trace(`in main module\n`);
 
 import { Snapshot } from './snapshot_restore';
@@ -160,9 +162,11 @@ export default function main() {
     const slot = 123;
     const actual = s0.encodeSlot(slot, exits);
 
-    trace(`typeof actual: ${typeof actual} ArrayBuffer? ${actual instanceof ArrayBuffer}\n`);
-    trace(`root: ${slot} encodedSlot: ${s0.tohex(actual)}\n`);
+    trace(`slot: ${slot} encodedSlot: ${s0.tohex(actual)}\n`);
 
+    let aWorker = new Worker("vat1");
+    const actual2 = s0.dumpHeap(aWorker, exits);
+    trace(`worker: ${aWorker} snapshot: ${s0.tohex(actual2)}\n`);
 
     return;
     // TODO...

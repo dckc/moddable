@@ -1,6 +1,7 @@
 {
     "include": [
-        "$(MODDABLE)/examples/manifest_base.json"
+        "$(MODDABLE)/examples/manifest_base.json",
+	"$(MODULES)/base/worker/manifest.json"
     ],
     "modules": {
         "*": [

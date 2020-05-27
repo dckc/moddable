@@ -18,35 +18,159 @@ static void debug_push(char *format, ...);
 static void debug_pop();
 
 
-void Snapshot_prototype_encodeSlot(xsMachine* the)
+// ISSUE: sync with gioWorker.c
+typedef struct sxWorker txWorker;
+struct sxWorker {
+  xsMachine* machine;
+  //...
+};
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ */
+xsIntegerValue walkHeap(xsMachine* the, xsMachine* workerMachine) {
+  txSlot *heap, *slot, *limit;
+  xsIntegerValue heapIx = 0;
+  xsIntegerValue offset = 0;
+  // ISSUE: xsCollectGarbage(); would be in the wrong thread
+
+  heap = workerMachine->firstHeap;
+  while(heap) {
+    slot = heap + 1;
+    limit = heap->value.reference;
+    while (slot < limit) {
+      offset = encodeSlot(the, heapIx, heap, slot, offset);
+      slot++;
+    }
+    heap = heap->next;
+    heapIx += 1;
+  }
+
+  return offset;
+}
+
+
+// a la fxPrintHeap
+// ISSUE: data race with running worker?
+void Snapshot_prototype_dumpHeap(xsMachine* the)
+{
+  if (xsToInteger(xsArgc) != 2) {
+    mxTypeError("expected 2 arguments");
+  }
+  txWorker *worker = xsGetHostData(xsArg(0)); // ISSUE: what if it's not a worker?
+  txMachine *workerMachine = worker->machine;
+
+  xsVars(1);
+  xsVar(0) = xsArrayBuffer(NULL, 0x100);
+
+  xsIntegerValue size = walkHeap(the, workerMachine);
+  xsSetArrayBufferLength(xsVar(0), size);
+  xsResult = xsVar(0);
+}
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ */
+xsIntegerValue appendSlotMessage(xsMachine *the, Slot *msg, xsIntegerValue offset) {
+  char buf[64];  // big enough to serialize any slot; note assert() below
+  xsIntegerValue len;
+  len = slot__get_packed_size(msg);
+  assert(len < sizeof(buf));
+  slot__pack(msg, buf);
+  fprintf(stderr, "%s:%d:@@ Slot kind %d message len %d\n", __FILE__, __LINE__, msg->kind_case, len);
+  return append(the, offset, &buf, len);
+}
+
+
+/**
+ * REQUIRES: xsVar(0) is an ArrayBuffer
+ */
+xsIntegerValue encodeSlot(xsMachine* the, xsIntegerValue heapIx, txSlot *heap, txSlot *slot, xsIntegerValue offset)
 {
   Slot msg = SLOT__INIT;
-  char buf[64];
-  xsIntegerValue len;
+  Address next = ADDRESS__INIT;
 
+#define dumpAddress(SRC, MSG, DEST) if (SRC) {            \
+    (MSG).heap = heapIx; (MSG).offset = (SRC) - heap;  \
+    (DEST) = &(MSG); \
+  }
+
+  dumpAddress(slot->next, next, msg.next);
+
+  msg.id = slot->ID;
+  msg.flag = slot->flag; // TODO: extra flag bits from caller?
+  msg.kind_case = slot->kind;
+  switch(slot->kind) {
+  case XS_UNDEFINED_KIND: {
+    msg.kind_case = 100;  // .proto _case can't be 0
+  } break;
+  case XS_NULL_KIND: {
+  } break;
+  case XS_NUMBER_KIND: {
+    msg.number = slot->value.number;
+  } break;
+  case XS_INTEGER_KIND: {
+    msg.integer = slot->value.integer;
+  } break;
+  case XS_STRING_X_KIND: {
+    msg.string = slot->value.string;
+  } break;
+  case XS_REFERENCE_KIND: {
+    Address reference = ADDRESS__INIT;
+    dumpAddress(slot->value.reference, reference, msg.reference);
+    return appendSlotMessage(the, &msg, offset);
+  }
+  case XS_INSTANCE_KIND: {
+    Address prototype = ADDRESS__INIT;
+    dumpAddress(slot->value.instance.prototype, prototype, msg.prototype);
+    return appendSlotMessage(the, &msg, offset);
+  }
+  case XS_CALLBACK_KIND: { // 18
+    fprintf(stderr, "%s:%d: TODO: callback\n", __FILE__, __LINE__);
+  } break;
+  case XS_CODE_X_KIND: { // 20
+    fprintf(stderr, "%s:%d: TODO: CODE_X\n", __FILE__, __LINE__);
+  } break;
+  case XS_GLOBAL_KIND: { // 25
+    fprintf(stderr, "%s:%d: TODO: global\n", __FILE__, __LINE__);
+  } break;
+  case XS_HOST_KIND: { // 26
+    fprintf(stderr, "%s:%d: TODO: HOST\n", __FILE__, __LINE__);
+  } break;
+  case XS_MODULE_KIND: { // 28
+    fprintf(stderr, "%s:%d: TODO: MODULE\n", __FILE__, __LINE__);
+  } break;
+  case XS_PROGRAM_KIND: { // 29
+    Module module = MODULE__INIT;
+    Address realm = ADDRESS__INIT;
+    dumpAddress(slot->value.module.realm, realm, module.realm);
+    module.id = slot->value.module.id;
+    return appendSlotMessage(the, &msg, offset);
+  }
+  case XS_HOME_KIND: { // 43
+    fprintf(stderr, "%s:%d: TODO: HOME\n", __FILE__, __LINE__);
+  } break;
+  default:
+    mxTypeError("%s:%d: slot kind not implemented: %d", __FILE__, __LINE__, slot->kind);
+  }
+  return appendSlotMessage(the, &msg, offset);
+}
+
+void Snapshot_prototype_encodeSlot(xsMachine* the)
+{
   if (xsToInteger(xsArgc) != 2) {
     mxTypeError("expected 2 arguments");
   }
   txSlot *slot = &xsArg(0);
+  xsVars(1);
+  xsVar(0) = xsArrayBuffer(NULL, 0x100);
 
-  msg.next = slot->next; // TODO: compute index
-  msg.id = slot->ID;
-  msg.flag = slot->flag; // TODO: extra flag bits from caller?
-  switch(slot->kind) {
-  case XS_INTEGER_KIND: {
-    xsIntegerValue value = xsToInteger(*slot);
-    msg.kind_case = SLOT__KIND_INTEGER;
-    msg.integer = value;
-  }
-    break;
-  default:
-    mxTypeError("slot kind not implemented: %d", slot->kind);
-  }
-  len = slot__get_packed_size(&msg);
-  fprintf(stderr, "@@encodeSlot size: %d\n", len);
-  assert(len < sizeof(buf));
-  slot__pack(&msg, buf);
-  xsResult = xsArrayBuffer(&buf, len);
+  xsIntegerValue size = encodeSlot(the, -1, slot, slot, 0);
+  fprintf(stderr, "@@encoded slot %p in %d bytes\n", slot, size);
+  xsSetArrayBufferLength(xsVar(0), size);
+  xsResult = xsVar(0);
 }
 
 
