@@ -1,5 +1,9 @@
 syntax = "proto3";
 
+message SlotHeap {
+  repeated Slot slot = 1;
+}
+
 message Slot {
   Address next = 200;
   int32 ID = 201;
@@ -21,7 +25,7 @@ message Slot {
     // 11
     // 12
     Address prototype = 13;  // XS_INSTANCE_KIND
-    Table global = 25;  // XS_INSTANCE_KIND
+    Table global = 25;  // XS_GLOBAL_KIND
   }
 }
 
@@ -31,7 +35,7 @@ message Address {
   //   if ((projection->heap < slot) && (slot < projection->limit)) {
   //     fprintf(file, "(txSlot*)&gxHeap[%d]", (int)projection->indexes[slot - projection->heap]);
   int32 heap = 1;
-  int64 offset = 2;
+  int64 index = 2;
 }
 
 message Module {

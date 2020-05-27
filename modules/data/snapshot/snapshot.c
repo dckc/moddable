@@ -72,14 +72,21 @@ void Snapshot_prototype_dumpHeap(xsMachine* the)
 
 /**
  * REQUIRES: xsVar(0) is an ArrayBuffer
+ *
+ * Enclose the slotMessage in a SlotHeap, pack, and append to xsVar(0)
+ * Note that repeated SlotHeap messages look like one big SlotHeap message.
  */
-xsIntegerValue appendSlotMessage(xsMachine *the, Slot *msg, xsIntegerValue offset) {
+xsIntegerValue appendSlotMessage(xsMachine *the, Slot *slotMsg, xsIntegerValue offset) {
   char buf[64];  // big enough to serialize any slot; note assert() below
   xsIntegerValue len;
-  len = slot__get_packed_size(msg);
+  SlotHeap slotHeap = SLOT_HEAP__INIT;
+  slotHeap.n_slot = 1;
+  slotHeap.slot = &slotMsg;
+
+  len = slot_heap__get_packed_size(&slotHeap);
   assert(len < sizeof(buf));
-  slot__pack(msg, buf);
-  fprintf(stderr, "%s:%d:@@ Slot kind %d message len %d\n", __FILE__, __LINE__, msg->kind_case, len);
+  slot_heap__pack(&slotHeap, buf);
+  fprintf(stderr, "%s:%d:@@ Slot kind %d message len %d\n", __FILE__, __LINE__, slotMsg->kind_case, len);
   return append(the, offset, &buf, len);
 }
 
@@ -93,7 +100,7 @@ xsIntegerValue encodeSlot(xsMachine* the, xsIntegerValue heapIx, txSlot *heap, t
   Address next = ADDRESS__INIT;
 
 #define dumpAddress(SRC, MSG, DEST) if (SRC) {            \
-    (MSG).heap = heapIx; (MSG).offset = (SRC) - heap;  \
+    (MSG).heap = heapIx; (MSG).index = ((SRC) - heap) / sizeof(txSlot); \
     (DEST) = &(MSG); \
   }
 
