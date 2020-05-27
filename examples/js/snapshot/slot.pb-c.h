@@ -15,6 +15,7 @@ PROTOBUF_C__BEGIN_DECLS
 #endif
 
 
+typedef struct _SlotHeap SlotHeap;
 typedef struct _Slot Slot;
 typedef struct _Address Address;
 typedef struct _Module Module;
@@ -44,6 +45,17 @@ typedef struct _Callback Callback;
 
 
 /* --- messages --- */
+
+struct  _SlotHeap
+{
+  ProtobufCMessage base;
+  size_t n_slot;
+  Slot **slot;
+};
+#define SLOT_HEAP__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&slot_heap__descriptor) \
+    , 0,NULL }
+
 
 typedef enum {
   SLOT__KIND__NOT_SET = 0,
@@ -108,7 +120,7 @@ struct  _Slot
      */
     Address *prototype;
     /*
-     * XS_INSTANCE_KIND
+     * XS_GLOBAL_KIND
      */
     Table *global;
   };
@@ -129,8 +141,8 @@ struct  _Address
    */
   protobuf_c_boolean has_heap;
   int32_t heap;
-  protobuf_c_boolean has_offset;
-  int64_t offset;
+  protobuf_c_boolean has_index;
+  int64_t index;
 };
 #define ADDRESS__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&address__descriptor) \
@@ -482,6 +494,25 @@ struct  _Callback
     , 0,0 }
 
 
+/* SlotHeap methods */
+void   slot_heap__init
+                     (SlotHeap         *message);
+size_t slot_heap__get_packed_size
+                     (const SlotHeap   *message);
+size_t slot_heap__pack
+                     (const SlotHeap   *message,
+                      uint8_t             *out);
+size_t slot_heap__pack_to_buffer
+                     (const SlotHeap   *message,
+                      ProtobufCBuffer     *buffer);
+SlotHeap *
+       slot_heap__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   slot_heap__free_unpacked
+                     (SlotHeap *message,
+                      ProtobufCAllocator *allocator);
 /* Slot methods */
 void   slot__init
                      (Slot         *message);
@@ -905,6 +936,9 @@ void   callback__free_unpacked
                       ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
+typedef void (*SlotHeap_Closure)
+                 (const SlotHeap *message,
+                  void *closure_data);
 typedef void (*Slot_Closure)
                  (const Slot *message,
                   void *closure_data);
@@ -980,6 +1014,7 @@ typedef void (*Callback_Closure)
 
 /* --- descriptors --- */
 
+extern const ProtobufCMessageDescriptor slot_heap__descriptor;
 extern const ProtobufCMessageDescriptor slot__descriptor;
 extern const ProtobufCMessageDescriptor address__descriptor;
 extern const ProtobufCMessageDescriptor module__descriptor;

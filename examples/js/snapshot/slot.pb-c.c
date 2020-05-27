@@ -7,6 +7,49 @@
 #endif
 
 #include "slot.pb-c.h"
+void   slot_heap__init
+                     (SlotHeap         *message)
+{
+  static SlotHeap init_value = SLOT_HEAP__INIT;
+  *message = init_value;
+}
+size_t slot_heap__get_packed_size
+                     (const SlotHeap *message)
+{
+  assert(message->base.descriptor == &slot_heap__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t slot_heap__pack
+                     (const SlotHeap *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &slot_heap__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t slot_heap__pack_to_buffer
+                     (const SlotHeap *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &slot_heap__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+SlotHeap *
+       slot_heap__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (SlotHeap *)
+     protobuf_c_message_unpack (&slot_heap__descriptor,
+                                allocator, len, data);
+}
+void   slot_heap__free_unpacked
+                     (SlotHeap *message,
+                      ProtobufCAllocator *allocator)
+{
+  assert(message->base.descriptor == &slot_heap__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   slot__init
                      (Slot         *message)
 {
@@ -959,6 +1002,44 @@ void   callback__free_unpacked
   assert(message->base.descriptor == &callback__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+static const ProtobufCFieldDescriptor slot_heap__field_descriptors[1] =
+{
+  {
+    "slot",
+    1,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(SlotHeap, n_slot),
+    offsetof(SlotHeap, slot),
+    &slot__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned slot_heap__field_indices_by_name[] = {
+  0,   /* field[0] = slot */
+};
+static const ProtobufCIntRange slot_heap__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor slot_heap__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "SlotHeap",
+  "SlotHeap",
+  "SlotHeap",
+  "",
+  sizeof(SlotHeap),
+  1,
+  slot_heap__field_descriptors,
+  slot_heap__field_indices_by_name,
+  1,  slot_heap__number_ranges,
+  (ProtobufCMessageInit) slot_heap__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCFieldDescriptor slot__field_descriptors[15] =
 {
   {
@@ -1201,12 +1282,12 @@ static const ProtobufCFieldDescriptor address__field_descriptors[2] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "offset",
+    "index",
     2,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_INT64,
-    offsetof(Address, has_offset),
-    offsetof(Address, offset),
+    offsetof(Address, has_index),
+    offsetof(Address, index),
     NULL,
     NULL,
     0,             /* flags */
@@ -1215,7 +1296,7 @@ static const ProtobufCFieldDescriptor address__field_descriptors[2] =
 };
 static const unsigned address__field_indices_by_name[] = {
   0,   /* field[0] = heap */
-  1,   /* field[1] = offset */
+  1,   /* field[1] = index */
 };
 static const ProtobufCIntRange address__number_ranges[1 + 1] =
 {
