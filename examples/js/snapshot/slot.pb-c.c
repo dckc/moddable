@@ -93,6 +93,92 @@ void   address__free_unpacked
   assert(message->base.descriptor == &address__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   module__init
+                     (Module         *message)
+{
+  static Module init_value = MODULE__INIT;
+  *message = init_value;
+}
+size_t module__get_packed_size
+                     (const Module *message)
+{
+  assert(message->base.descriptor == &module__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t module__pack
+                     (const Module *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &module__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t module__pack_to_buffer
+                     (const Module *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &module__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Module *
+       module__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Module *)
+     protobuf_c_message_unpack (&module__descriptor,
+                                allocator, len, data);
+}
+void   module__free_unpacked
+                     (Module *message,
+                      ProtobufCAllocator *allocator)
+{
+  assert(message->base.descriptor == &module__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   table__init
+                     (Table         *message)
+{
+  static Table init_value = TABLE__INIT;
+  *message = init_value;
+}
+size_t table__get_packed_size
+                     (const Table *message)
+{
+  assert(message->base.descriptor == &table__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t table__pack
+                     (const Table *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &table__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t table__pack_to_buffer
+                     (const Table *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &table__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+Table *
+       table__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (Table *)
+     protobuf_c_message_unpack (&table__descriptor,
+                                allocator, len, data);
+}
+void   table__free_unpacked
+                     (Table *message,
+                      ProtobufCAllocator *allocator)
+{
+  assert(message->base.descriptor == &table__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   ibid__init
                      (Ibid         *message)
 {
@@ -873,7 +959,7 @@ void   callback__free_unpacked
   assert(message->base.descriptor == &callback__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-static const ProtobufCFieldDescriptor slot__field_descriptors[12] =
+static const ProtobufCFieldDescriptor slot__field_descriptors[15] =
 {
   {
     "the_null",
@@ -927,7 +1013,7 @@ static const ProtobufCFieldDescriptor slot__field_descriptors[12] =
     "string",
     5,
     PROTOBUF_C_LABEL_OPTIONAL,
-    PROTOBUF_C_TYPE_BYTES,
+    PROTOBUF_C_TYPE_STRING,
     offsetof(Slot, kind_case),
     offsetof(Slot, string),
     NULL,
@@ -955,6 +1041,42 @@ static const ProtobufCFieldDescriptor slot__field_descriptors[12] =
     offsetof(Slot, kind_case),
     offsetof(Slot, bigint),
     NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reference",
+    10,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Slot, kind_case),
+    offsetof(Slot, reference),
+    &address__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "prototype",
+    13,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Slot, kind_case),
+    offsetof(Slot, prototype),
+    &address__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "global",
+    25,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Slot, kind_case),
+    offsetof(Slot, global),
+    &table__descriptor,
     NULL,
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
@@ -1021,27 +1143,33 @@ static const ProtobufCFieldDescriptor slot__field_descriptors[12] =
   },
 };
 static const unsigned slot__field_indices_by_name[] = {
-  10,   /* field[10] = ID */
+  13,   /* field[13] = ID */
   6,   /* field[6] = bigint */
   1,   /* field[1] = bool */
-  11,   /* field[11] = flag */
+  14,   /* field[14] = flag */
+  9,   /* field[9] = global */
   2,   /* field[2] = integer */
-  9,   /* field[9] = next */
+  12,   /* field[12] = next */
   3,   /* field[3] = number */
+  8,   /* field[8] = prototype */
+  7,   /* field[7] = reference */
   4,   /* field[4] = string */
   5,   /* field[5] = symbol */
   0,   /* field[0] = the_null */
-  8,   /* field[8] = undefined */
-  7,   /* field[7] = uninitialized */
+  11,   /* field[11] = undefined */
+  10,   /* field[10] = uninitialized */
 };
-static const ProtobufCIntRange slot__number_ranges[5 + 1] =
+static const ProtobufCIntRange slot__number_ranges[8 + 1] =
 {
   { 1, 0 },
   { 7, 5 },
-  { 99, 7 },
-  { 200, 9 },
-  { 203, 11 },
-  { 0, 12 }
+  { 10, 7 },
+  { 13, 8 },
+  { 25, 9 },
+  { 99, 10 },
+  { 200, 12 },
+  { 203, 14 },
+  { 0, 15 }
 };
 const ProtobufCMessageDescriptor slot__descriptor =
 {
@@ -1051,22 +1179,34 @@ const ProtobufCMessageDescriptor slot__descriptor =
   "Slot",
   "",
   sizeof(Slot),
-  12,
+  15,
   slot__field_descriptors,
   slot__field_indices_by_name,
-  5,  slot__number_ranges,
+  8,  slot__number_ranges,
   (ProtobufCMessageInit) slot__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor address__field_descriptors[1] =
+static const ProtobufCFieldDescriptor address__field_descriptors[2] =
 {
   {
-    "index",
+    "heap",
     1,
     PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_INT32,
+    offsetof(Address, has_heap),
+    offsetof(Address, heap),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "offset",
+    2,
+    PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_INT64,
-    offsetof(Address, has_index),
-    offsetof(Address, index),
+    offsetof(Address, has_offset),
+    offsetof(Address, offset),
     NULL,
     NULL,
     0,             /* flags */
@@ -1074,12 +1214,13 @@ static const ProtobufCFieldDescriptor address__field_descriptors[1] =
   },
 };
 static const unsigned address__field_indices_by_name[] = {
-  0,   /* field[0] = index */
+  0,   /* field[0] = heap */
+  1,   /* field[1] = offset */
 };
 static const ProtobufCIntRange address__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 1 }
+  { 0, 2 }
 };
 const ProtobufCMessageDescriptor address__descriptor =
 {
@@ -1089,11 +1230,100 @@ const ProtobufCMessageDescriptor address__descriptor =
   "Address",
   "",
   sizeof(Address),
-  1,
+  2,
   address__field_descriptors,
   address__field_indices_by_name,
   1,  address__number_ranges,
   (ProtobufCMessageInit) address__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor module__field_descriptors[2] =
+{
+  {
+    "realm",
+    1,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(Module, realm),
+    &address__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "id",
+    2,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_INT32,
+    offsetof(Module, has_id),
+    offsetof(Module, id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned module__field_indices_by_name[] = {
+  1,   /* field[1] = id */
+  0,   /* field[0] = realm */
+};
+static const ProtobufCIntRange module__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor module__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Module",
+  "Module",
+  "Module",
+  "",
+  sizeof(Module),
+  2,
+  module__field_descriptors,
+  module__field_indices_by_name,
+  1,  module__number_ranges,
+  (ProtobufCMessageInit) module__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor table__field_descriptors[1] =
+{
+  {
+    "address",
+    1,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Table, n_address),
+    offsetof(Table, address),
+    &address__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned table__field_indices_by_name[] = {
+  0,   /* field[0] = address */
+};
+static const ProtobufCIntRange table__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor table__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Table",
+  "Table",
+  "Table",
+  "",
+  sizeof(Table),
+  1,
+  table__field_descriptors,
+  table__field_indices_by_name,
+  1,  table__number_ranges,
+  (ProtobufCMessageInit) table__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor ibid__field_descriptors[2] =

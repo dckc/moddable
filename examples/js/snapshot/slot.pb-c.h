@@ -17,6 +17,8 @@ PROTOBUF_C__BEGIN_DECLS
 
 typedef struct _Slot Slot;
 typedef struct _Address Address;
+typedef struct _Module Module;
+typedef struct _Table Table;
 typedef struct _Ibid Ibid;
 typedef struct _Value Value;
 typedef struct _Value__FlagId Value__FlagId;
@@ -54,6 +56,9 @@ typedef enum {
   SLOT__KIND_STRING = 5,
   SLOT__KIND_SYMBOL = 7,
   SLOT__KIND_BIGINT = 8,
+  SLOT__KIND_REFERENCE = 10,
+  SLOT__KIND_PROTOTYPE = 13,
+  SLOT__KIND_GLOBAL = 25,
 } Slot__KindCase;
 
 struct  _Slot
@@ -84,15 +89,28 @@ struct  _Slot
     protobuf_c_boolean bool_;
     int32_t integer;
     double number;
-    ProtobufCBinaryData string;
+    char *string;
     /*
      * STRING_X_KIND = 6
      */
     int32_t symbol;
+    ProtobufCBinaryData bigint;
     /*
      * BIGINT_X_KIND = 9
      */
-    ProtobufCBinaryData bigint;
+    Address *reference;
+    /*
+     * 11
+     * 12
+     */
+    /*
+     * XS_INSTANCE_KIND
+     */
+    Address *prototype;
+    /*
+     * XS_INSTANCE_KIND
+     */
+    Table *global;
   };
 };
 #define SLOT__INIT \
@@ -109,12 +127,37 @@ struct  _Address
    *   if ((projection->heap < slot) && (slot < projection->limit)) {
    *     fprintf(file, "(txSlot*)&gxHeap[%d]", (int)projection->indexes[slot - projection->heap]);
    */
-  protobuf_c_boolean has_index;
-  int64_t index;
+  protobuf_c_boolean has_heap;
+  int32_t heap;
+  protobuf_c_boolean has_offset;
+  int64_t offset;
 };
 #define ADDRESS__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&address__descriptor) \
-    , 0,0 }
+    , 0,0, 0,0 }
+
+
+struct  _Module
+{
+  ProtobufCMessage base;
+  Address *realm;
+  protobuf_c_boolean has_id;
+  int32_t id;
+};
+#define MODULE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&module__descriptor) \
+    , NULL, 0,0 }
+
+
+struct  _Table
+{
+  ProtobufCMessage base;
+  size_t n_address;
+  Address **address;
+};
+#define TABLE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&table__descriptor) \
+    , 0,NULL }
 
 
 typedef enum {
@@ -477,6 +520,44 @@ Address *
 void   address__free_unpacked
                      (Address *message,
                       ProtobufCAllocator *allocator);
+/* Module methods */
+void   module__init
+                     (Module         *message);
+size_t module__get_packed_size
+                     (const Module   *message);
+size_t module__pack
+                     (const Module   *message,
+                      uint8_t             *out);
+size_t module__pack_to_buffer
+                     (const Module   *message,
+                      ProtobufCBuffer     *buffer);
+Module *
+       module__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   module__free_unpacked
+                     (Module *message,
+                      ProtobufCAllocator *allocator);
+/* Table methods */
+void   table__init
+                     (Table         *message);
+size_t table__get_packed_size
+                     (const Table   *message);
+size_t table__pack
+                     (const Table   *message,
+                      uint8_t             *out);
+size_t table__pack_to_buffer
+                     (const Table   *message,
+                      ProtobufCBuffer     *buffer);
+Table *
+       table__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   table__free_unpacked
+                     (Table *message,
+                      ProtobufCAllocator *allocator);
 /* Ibid methods */
 void   ibid__init
                      (Ibid         *message);
@@ -830,6 +911,12 @@ typedef void (*Slot_Closure)
 typedef void (*Address_Closure)
                  (const Address *message,
                   void *closure_data);
+typedef void (*Module_Closure)
+                 (const Module *message,
+                  void *closure_data);
+typedef void (*Table_Closure)
+                 (const Table *message,
+                  void *closure_data);
 typedef void (*Ibid_Closure)
                  (const Ibid *message,
                   void *closure_data);
@@ -895,6 +982,8 @@ typedef void (*Callback_Closure)
 
 extern const ProtobufCMessageDescriptor slot__descriptor;
 extern const ProtobufCMessageDescriptor address__descriptor;
+extern const ProtobufCMessageDescriptor module__descriptor;
+extern const ProtobufCMessageDescriptor table__descriptor;
 extern const ProtobufCMessageDescriptor ibid__descriptor;
 extern const ProtobufCMessageDescriptor value__descriptor;
 extern const ProtobufCMessageDescriptor value__flag_id__descriptor;
